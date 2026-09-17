@@ -1,5 +1,9 @@
 import { defineConfig, devices } from '@playwright/test'
 
+// Keep validation isolated from other local projects when default ports are occupied.
+const offset = Number(process.env['E2E_PORT_OFFSET'] ?? 0)
+const url = (port: number) => `http://127.0.0.1:${port + offset}`
+
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,
@@ -17,7 +21,7 @@ export default defineConfig({
       testMatch: /playground-react-detection\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
-        baseURL: 'http://127.0.0.1:5173',
+        baseURL: url(5173),
       },
     },
     {
@@ -25,7 +29,7 @@ export default defineConfig({
       testMatch: /playground-react18-detection\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
-        baseURL: 'http://127.0.0.1:5175',
+        baseURL: url(5175),
       },
     },
     {
@@ -33,7 +37,7 @@ export default defineConfig({
       testMatch: /playground-rsbuild-detection\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
-        baseURL: 'http://127.0.0.1:5177',
+        baseURL: url(5177),
       },
     },
     {
@@ -41,7 +45,7 @@ export default defineConfig({
       testMatch: /playground-vue-detection\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
-        baseURL: 'http://127.0.0.1:5174',
+        baseURL: url(5174),
       },
     },
     {
@@ -50,7 +54,7 @@ export default defineConfig({
       fullyParallel: false,
       use: {
         ...devices['Desktop Chrome'],
-        baseURL: 'http://127.0.0.1:5176',
+        baseURL: url(5176),
       },
     },
     {
@@ -59,46 +63,46 @@ export default defineConfig({
       fullyParallel: false,
       use: {
         ...devices['Desktop Chrome'],
-        baseURL: 'http://127.0.0.1:5178',
+        baseURL: url(5178),
       },
     },
   ],
 
   webServer: [
     {
-      command: 'pnpm --dir playground/react dev --host 127.0.0.1 --port 5173',
-      url: 'http://127.0.0.1:5173',
+      command: `pnpm --dir playground/react dev --host 127.0.0.1 --port ${5173 + offset}`,
+      url: url(5173),
       reuseExistingServer: !process.env.CI,
       timeout: 60000,
     },
     {
       command:
-        'pnpm --dir playground/react18 dev --host 127.0.0.1 --port 5175',
-      url: 'http://127.0.0.1:5175',
+        `pnpm --dir playground/react18 dev --host 127.0.0.1 --port ${5175 + offset}`,
+      url: url(5175),
       reuseExistingServer: !process.env.CI,
       timeout: 60000,
     },
     {
-      command: 'pnpm --dir playground/rsbuild dev',
-      url: 'http://127.0.0.1:5177',
+      command: `pnpm --dir playground/rsbuild dev --port ${5177 + offset}`,
+      url: url(5177),
       reuseExistingServer: !process.env.CI,
       timeout: 60000,
     },
     {
-      command: 'pnpm --dir playground/vue dev --host 127.0.0.1 --port 5174',
-      url: 'http://127.0.0.1:5174',
+      command: `pnpm --dir playground/vue dev --host 127.0.0.1 --port ${5174 + offset}`,
+      url: url(5174),
       reuseExistingServer: !process.env.CI,
       timeout: 60000,
     },
     {
-      command: 'pnpm --dir playground/nuxt dev --host 127.0.0.1 --port 5176',
-      url: 'http://127.0.0.1:5176',
+      command: `pnpm --dir playground/nuxt dev --host 127.0.0.1 --port ${5176 + offset}`,
+      url: url(5176),
       reuseExistingServer: !process.env.CI,
       timeout: 60000,
     },
     {
-      command: 'pnpm --dir playground/next dev -p 5178 -H 127.0.0.1',
-      url: 'http://127.0.0.1:5178',
+      command: `pnpm --dir playground/next dev -p ${5178 + offset} -H 127.0.0.1`,
+      url: url(5178),
       reuseExistingServer: !process.env.CI,
       timeout: 120000,
     },

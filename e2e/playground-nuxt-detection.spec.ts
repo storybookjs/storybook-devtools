@@ -1,3 +1,4 @@
+import { registerAgentSuite } from './common-agent-suite'
 import { test, expect } from '@playwright/test'
 import { registerCommonHighlighterSuite } from './common-highlighter-suite'
 import { registerHighlightPanelStateSuite } from './common-highlight-panel-state-suite'
@@ -159,3 +160,5 @@ registerSsrSuite(test as any, expect as any, {
   selector: '.hydration-info',
   markerText: 'Server-rendered at',
 })
+
+registerAgentSuite()

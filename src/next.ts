@@ -25,6 +25,7 @@ import {
   type ComponentHighlighterUnpluginHost,
 } from './unplugin'
 import type { ComponentHighlighterOptions } from './create-component-highlighter-plugin'
+import { createRuntimeMcp, type RuntimeMcp, type RuntimeAgentOptions } from './agent-mcp'
 import { createStorybookDevframe, type StorybookDevframeState } from './devframe'
 import { registerStorybookHubSurfaces } from './hub-setup'
 import { ConsoleNotificationService } from './notifications'
@@ -627,6 +628,8 @@ export function withStorybookDevtools(
 // ─── app/__devframes/[[...path]]/route.ts ─────────────────────────────────
 
 export interface CreateStorybookDevtoolsRouteOptions {
+  /** Opt in to read-only runtime MCP at <base>storybook-devtools/mcp. */
+  agent?: RuntimeAgentOptions
   /** Gate the hub behind interactive auth. @default true */
   auth?: boolean
   /** Pin the side-car RPC/WS port (Next routes can't accept WS upgrades). */
@@ -721,11 +724,17 @@ export function createStorybookDevtoolsRoute(
     },
   })
 
-  return {
-    GET: (req: Request) => hub.handler(req),
-    POST: (req: Request) => hub.handler(req),
-    DELETE: (req: Request) => hub.handler(req),
+  let mcp: Promise<RuntimeMcp> | undefined
+  const handler = async (req: Request) => {
+    if (options.agent && new URL(req.url).pathname === `${base}storybook-devtools/mcp`) {
+      if (process.env['NODE_ENV'] === 'production') return new Response('Not found', { status: 404 })
+      const agentOptions = options.agent
+      mcp ??= hub.ready().then(async instance => createRuntimeMcp(await instance.context, deps, agentOptions))
+      return (await mcp).fetch(req)
+    }
+    return hub.handler(req)
   }
+  return { GET: handler, POST: handler, DELETE: handler }
 }
 
 /**

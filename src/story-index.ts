@@ -32,6 +32,8 @@ import { CSF_STORY_FILE_PATTERN } from './utils/story-files'
 export interface StoryIndex {
   v: number
   entries: Record<string, StoryIndexEntryLike>
+  /** Provenance for agent consumers; stale indexes cannot establish gaps. */
+  source?: 'storybook' | 'scan' | 'stale'
 }
 
 export interface StoryIndexServiceOptions {
@@ -253,7 +255,7 @@ export function createStoryIndexService(
     }
 
     await walk(cwd)
-    return { v: 5, entries }
+    return { v: 5, entries, source: 'scan' }
   }
 
   return {
@@ -303,7 +305,7 @@ export function createStoryIndexService(
     pending = new Map()
 
     try {
-      lastIndex = (await generator.getIndex()) as StoryIndex
+      lastIndex = { ...(await generator.getIndex()) as StoryIndex, source: 'storybook' }
       lastIndexError = undefined
       return lastIndex
     } catch (error) {
@@ -320,7 +322,7 @@ export function createStoryIndexService(
         lastIndexError = message
         logDebug('[story-index] getIndex() failed:', message)
       }
-      return lastIndex ?? scanIndex()
+      return lastIndex ? { ...lastIndex, source: 'stale' } : scanIndex()
     }
   }
 }

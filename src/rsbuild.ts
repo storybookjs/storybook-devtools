@@ -17,6 +17,7 @@ import type { RsbuildPlugin, RsbuildPluginAPI } from '@rsbuild/core'
 import { initHub, DEVFRAMES_HUB_BASE } from '@devframes/hub/initiate'
 import { createUi } from '@devframes/hub-ui'
 import type { ComponentHighlighterOptions } from './create-component-highlighter-plugin'
+import { createRuntimeMcp, runtimeMcpMiddleware } from './agent-mcp'
 import { reactFramework } from './frameworks/react'
 import { vueFramework } from './frameworks/vue'
 import {
@@ -274,6 +275,12 @@ export function storybookDevtoolsRsbuild(
           },
         })
 
+        if (pluginOptions.agent) {
+          const agentOptions = pluginOptions.agent
+          const mcp = await createRuntimeMcp(await hub.context, deps, agentOptions)
+          server.middlewares.use(runtimeMcpMiddleware(async () => mcp))
+          api.onCloseDevServer(() => mcp.dispose())
+        }
         server.middlewares.use(hub.nodeMiddleware)
         server.middlewares.use(createClientBundleMiddleware(packageRoot))
 

@@ -156,6 +156,14 @@ pnpm exec playwright test
 Build before tests: runtime-helper tests and Next/Rsbuild load `dist`.
 Do not build concurrently with tests; the build clears that directory.
 
+Runtime MCP changes must also preserve the shared `e2e/common-agent-suite.ts`
+coverage on all six hosts: page-scoped identity, fresh snapshots, closed pages,
+read-only tool discovery, and authorization. Runtime MCP complements Storybook
+MCP; validate the latter through the serial suite below. If unrelated projects
+occupy the standard playground ports, set `E2E_PORT_OFFSET=1000` on the Playwright
+commands; this moves the app servers to 6173–6178. Set `E2E_STORYBOOK_PORT=6016`
+to move the serial suite's Storybook server too. Keep that port free.
+
 For Storybook peer, indexing, generation, or launcher changes, also run:
 
 ```bash
@@ -165,6 +173,8 @@ pnpm exec playwright test --config=playwright.storybook.config.ts
 This serial suite uses port 6006, starts Storybook through the panel,
 backs up a component's story file, creates and appends stories through RPC,
 runs the generated play function in a preview, and checks external deletion.
+It also checks Storybook MCP discovery and executes the generated story through
+`test-run` on React, Vue and Nuxt, asserting a passing-story report.
 It restores the exact original file and stops its own PTY. Keep port 6006
 free before running it. React 18 has no
 `.storybook` config: it checks fallback coverage and the launch failure UI.

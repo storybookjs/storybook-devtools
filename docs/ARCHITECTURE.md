@@ -310,6 +310,25 @@ replace there.
 
 ## Bundler hosts
 
+### Optional runtime MCP
+
+`src/agent.ts` defines three read-only tools: app context, exact instance
+inspection, and mounted story gaps. `src/agent-mcp.ts` serves Devframe's MCP
+adapter from an isolated agent context; its closures query the existing host
+RPC. No hub commands, write RPCs, or shared-state resources are exposed. The
+`agent` plugin option opts in with a bearer token; Next accepts it on its route
+factory. Vite/Nuxt/Rsbuild mount `/__storybook-devtools/mcp`; Next mounts
+`<hub-base>storybook-devtools/mcp`.
+
+`listeners.ts` registers the `component-highlighter:runtime-snapshot` client
+query. Snapshots have a random per-page ID, URL without query/fragment, capture time,
+selected instance ID, and DOM-connected instances. The server enumerates current
+peers using the RPC broadcast filter and queries each with a two-second bound,
+avoiding the shared registry's cross-tab replacement behavior. Props are returned
+only for exact instance inspection, with payload limits. `StoryIndex.source`
+reports `storybook`, `scan`, or `stale`; stale indexes cannot establish gaps.
+See [the MVP contract and limitations](./AGENT_MVP.md).
+
 | Host | Entry file | Instrumentation mount | Hook delivery | Dock/panel serving |
 |------|-----------|------------------------|---------------|---------------------|
 | Vite | `src/create-component-highlighter-plugin.ts` | `unplugin.vite()`, plus Vite-only hooks (`config`, `configResolved`, `configureServer`, `transformIndexHtml`, `handleHotUpdate`) | `'html'` via `transformIndexHtml`, or `'entry'` | devframe mounted through Vite's own dev server; dock client resolved via Vite's `/@id/{specifier}` |
@@ -328,7 +347,7 @@ Notes:
 
 ## Server RPC surface
 
-There is no HTTP middleware. Every server routine is a `devframe` RPC
+Panel operations use RPC rather than individual HTTP endpoints. Each routine is a `devframe` RPC
 function, one file per function under `src/rpc/functions/`, collected by
 `src/rpc/index.ts` into `serverFunctions`. Functions declare bare names; the
 `component-highlighter` scope namespaces them on the wire (e.g. `create-story`

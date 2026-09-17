@@ -6,6 +6,8 @@ export const dynamic = 'force-dynamic'
 const route = createStorybookDevtoolsRoute({
   // E2E must not require interactive Vite DevTools authorization.
   auth: false,
+  storybookUrl: `http://localhost:${process.env['E2E_STORYBOOK_PORT'] ?? 6006}`,
+  agent: { token: process.env['STORYBOOK_DEVTOOLS_MCP_TOKEN'] ?? 'playground-only' },
   // No pinned port: the auto-allocator probes a free port and the connection
   // meta advertises whatever was bound, so concurrent playgrounds cannot
   // collide — a pinned port fails loudly instead when another sidecar wins.

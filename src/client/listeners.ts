@@ -49,6 +49,8 @@ declare global {
 
 // Component registry
 const componentRegistry = new Map<string, ComponentInstance>()
+// getRandomValues also works on non-HTTPS LAN dev URLs, where randomUUID does not.
+const runtimePageId = Array.from(crypto.getRandomValues(new Uint32Array(4)), n => n.toString(16)).join('-')
 
 export function getComponentRegistry(): Map<string, ComponentInstance> {
   return componentRegistry
@@ -137,6 +139,33 @@ function autoInitRpc() {
       if (!rpcHandlersRegistered && ctx.rpc.client) {
         rpcHandlersRegistered = true
         try {
+          ctx.rpc.client.register({
+            name: 'component-highlighter:runtime-snapshot',
+            type: 'query',
+            handler: (query) => {
+              // Prop tracking is enabled only after this page is trusted.
+              if (!rpcCallFn || (query.pageId && query.pageId !== runtimePageId)) return null
+              const mounted = [...componentRegistry.values()].filter(i => i.element?.isConnected)
+              const selected = getHighlightActor().getSnapshot().context.selectedComponentId
+              const matches = query.instanceId ? mounted.filter(i => i.id === query.instanceId) : mounted
+              let propsTruncated = false
+              const instances = matches.slice(0, 200).map(instance => {
+                const data = serializeInstance(instance)
+                if (!query.instanceId) delete data.serializedProps
+                else if (JSON.stringify(data.serializedProps ?? {}).length > 32_000) {
+                  delete data.serializedProps
+                  propsTruncated = true
+                }
+                return data
+              })
+              return {
+                pageId: runtimePageId, url: location.origin + location.pathname,
+                capturedAt: new Date().toISOString(), selectedInstanceId: selected,
+                instances, totalInstances: mounted.length, truncated: matches.length > instances.length, propsTruncated,
+              }
+            },
+          })
+
           ctx.rpc.client.register({
             name: 'component-highlighter:do-scroll-to-component',
             type: 'action',

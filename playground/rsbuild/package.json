@@ -13,6 +13,7 @@
     "@rsbuild/core": "^2.1.13",
     "@rsbuild/plugin-react": "^2.1.0",
     "@storybook/addon-docs": "10.6.0",
+    "@storybook/addon-mcp": "10.6.0",
     "@storybook/react": "10.6.0",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",

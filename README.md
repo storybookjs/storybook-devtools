@@ -4,6 +4,7 @@ Dev-server devtools for visual component highlighting and automatic Storybook st
 
 ## Features
 
+- **Runtime MCP (opt-in MVP)** - Give agents live component/source/prop context and mounted story gaps, alongside Storybook MCP. [Setup and limitations](./docs/AGENT_MVP.md).
 - **Component Highlighting** - Visual overlay on React, Vue, and Nuxt SSR components
 - **One-Click Story Generation** - Create Storybook stories directly from your running app
 - **Interaction Recording** - Record user interactions and generate stories with play functions

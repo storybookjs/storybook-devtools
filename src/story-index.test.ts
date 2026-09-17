@@ -45,6 +45,23 @@ describe('createStoryIndexService', () => {
     expect(Object.keys((await service.getIndex()).entries)).toContain('custom-button--first')
   })
 
+  it('marks a retained index stale after a parse failure and recovers its provenance', async () => {
+    const cwd = configuredProject()
+    const service = createStoryIndexService({ cwd, logDebug: () => {} })
+    const first = await service.getIndex()
+    expect(first.source).toBe('storybook')
+    const file = path.join(cwd, 'src/Button.stories.tsx')
+    fs.writeFileSync(file, 'export default {')
+    const stale = await service.getIndex()
+    expect(stale.source).toBe('stale')
+    expect(stale.entries).toEqual(first.entries)
+    expect(first.source).toBe('storybook')
+    fs.writeFileSync(file, `export default { title: 'Custom/Button' }; export const Recovered = {};`)
+    const recovered = await service.getIndex()
+    expect(recovered.source).toBe('storybook')
+    expect(Object.keys(recovered.entries)).toEqual(['custom-button--recovered'])
+  })
+
   it('rebuilds against changed config globs after full invalidation', async () => {
     const cwd = configuredProject()
     const service = createStoryIndexService({ cwd, logDebug: () => {} })
@@ -241,6 +258,7 @@ export const Default: Story = {}
       })
       const index = await service.getIndex()
       const entry = Object.values(index.entries)[0]
+      expect(index.source).toBe('scan')
 
       // No synthesised `componentPath`: `findStoryCandidates` matches these
       // on `importPath`, and a `componentPath` would decide membership

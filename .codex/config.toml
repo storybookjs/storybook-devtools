@@ -1,0 +1,9 @@
+# Local MVP demo; see docs/AGENT_MVP.md. These ports avoid other local projects.
+# The fixed bearer is only the playground fixture token, not a secret.
+[mcp_servers.storybook-runtime-mvp]
+url = "http://127.0.0.1:6173/__storybook-devtools/mcp"
+http_headers = { "Origin" = "http://127.0.0.1:6173", "Authorization" = "Bearer playground-only" }
+
+[mcp_servers.storybook-mvp]
+url = "http://127.0.0.1:6016/mcp"
+http_headers = { "Origin" = "http://127.0.0.1:6016" }

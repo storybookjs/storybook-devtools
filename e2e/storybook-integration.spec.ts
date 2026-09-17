@@ -2,6 +2,7 @@ import { test, expect, type Page } from '@playwright/test'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { loadCsf } from 'storybook/internal/csf-tools'
+import { callMcp } from './common-agent-suite'
 
 async function rpc(page: Page, method: string, ...args: unknown[]) {
   return page.evaluate(async ({ method, args }) => {
@@ -13,6 +14,7 @@ async function rpc(page: Page, method: string, ...args: unknown[]) {
 
 test('panel launch, real story writes and preview', async ({ page }, testInfo) => {
   test.setTimeout(180_000)
+  const storybookUrl = `http://localhost:${process.env['E2E_STORYBOOK_PORT'] ?? 6006}`
   const host = testInfo.project.name.replace('-chromium', '')
   const cwd = path.resolve('playground', host)
   const vue = host === 'vue' || host === 'nuxt'
@@ -89,7 +91,7 @@ test('panel launch, real story writes and preview', async ({ page }, testInfo) =
       return
     }
     await expect(panel.locator('.sb-iframe')).toBeVisible({ timeout: 120_000 })
-    const indexResponse = await page.request.get('http://localhost:6006/index.json')
+    const indexResponse = await page.request.get(`${storybookUrl}/index.json`)
     expect(indexResponse.ok()).toBe(true)
     const index = await indexResponse.json()
     const entries = Object.values(index.entries) as Array<{
@@ -98,8 +100,12 @@ test('panel launch, real story writes and preview', async ({ page }, testInfo) =
     const recorded = entries.find(entry =>
       entry.importPath.includes('Button.stories') && entry.name === 'Recorded')
     expect(recorded).toBeTruthy()
+    // Prove the complementary Storybook MCP server is reachable on each
+    // configured framework, independently of the application runtime MCP.
+    const mcp = await callMcp(page.request, `${storybookUrl}/mcp`, 'tools/list', {}, false)
+    expect(mcp.tools.some((tool: any) => tool.name === 'get-storybook-story-instructions')).toBe(true)
     const preview = await page.context().newPage()
-    await preview.goto(`http://localhost:6006/iframe.html?id=${recorded!.id}&viewMode=story`)
+    await preview.goto(`${storybookUrl}/iframe.html?id=${recorded!.id}&viewMode=story`)
     await expect(preview.getByRole('button', {
       name: 'Peer review', exact: true,
     })).toBeVisible({ timeout: 60_000 })
@@ -107,6 +113,16 @@ test('panel launch, real story writes and preview', async ({ page }, testInfo) =
       'data-peer-review-play', 'passed', { timeout: 15_000 },
     )
     await preview.close()
+
+    // Advertising a tool is insufficient: supported Vite hosts must execute it.
+    if (['react', 'vue', 'nuxt'].includes(host)) {
+      const tested = await callMcp(page.request, `${storybookUrl}/mcp`, 'tools/call', {
+        name: 'test-run', arguments: { stories: [{ storyId: recorded!.id }], a11y: false },
+      }, false)
+      expect(tested.isError, JSON.stringify(tested)).not.toBe(true)
+      const report = tested.content.map((item: { text?: string }) => item.text ?? '').join('\n')
+      expect(report).toContain(`## Passing Stories\n\n- ${recorded!.id}`)
+    }
 
     // External deletion must be visible even outside the app import graph.
     fs.unlinkSync(story)
@@ -117,7 +133,7 @@ test('panel launch, real story writes and preview', async ({ page }, testInfo) =
         await rpc(page, 'hub:terminals:terminate', 'storybook-dev')
         await expect.poll(async () => {
           try {
-            return (await page.request.get('http://localhost:6006', { timeout: 1000 })).ok()
+            return (await page.request.get(storybookUrl, { timeout: 1000 })).ok()
           } catch {
             return false
           }

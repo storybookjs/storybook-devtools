@@ -1,23 +1,14 @@
-/// <reference types="vitest/config" />
 /// <reference types="vite/client" />
 
-import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 import { DevTools } from '@vitejs/devtools'
-import { storybookTest } from '@storybook/addon-vitest/vitest-plugin'
-import { playwright } from '@vitest/browser-playwright'
 
 import componentHighlighter from '../../src/frameworks/react/plugin'
 
 const r = (filepath: string) =>
   fileURLToPath(new URL(filepath, import.meta.url))
-
-const dirname =
-  typeof __dirname !== 'undefined'
-    ? __dirname
-    : path.dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig({
   devtools: {
@@ -30,6 +21,8 @@ export default defineConfig({
     process.env.STORYBOOK
       ? null
       : componentHighlighter({
+          agent: { token: process.env['STORYBOOK_DEVTOOLS_MCP_TOKEN'] ?? 'playground-only' },
+          storybookUrl: `http://localhost:${process.env['E2E_STORYBOOK_PORT'] ?? 6006}`,
           debugMode: true,
         }),
   ].filter(Boolean),
@@ -44,28 +37,6 @@ export default defineConfig({
       '@storybook/experimental-devtools/client/vite-devtools': r(
         '../../src/client/vite-devtools.ts',
       ),
-    },
-  },
-  // @ts-expect-error the triple slash should work, check later
-  test: {
-    plugins: [
-      storybookTest({
-        configDir: path.join(dirname, '.storybook'),
-      }),
-    ],
-    test: {
-      name: 'storybook',
-      browser: {
-        enabled: true,
-        headless: true,
-        provider: playwright({}),
-        instances: [
-          {
-            browser: 'chromium',
-          },
-        ],
-      },
-      setupFiles: ['.storybook/vitest.setup.ts'],
     },
   },
 })

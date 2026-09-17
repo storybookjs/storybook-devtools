@@ -21,6 +21,12 @@ Vite: `./react`, `./vue`, or the unified `./vite` entry. Rsbuild: `./rsbuild`
 (`withStorybookDevtools()`). See the README's per-host sections for setup
 and host-specific options.
 
+The read-only runtime MCP MVP is exercised across all six playgrounds, including
+React 18 and both SSR hosts. Storybook MCP is installed in the five playgrounds
+with Storybook configuration; React 18 retains its intentional no-config fallback.
+MCP story tests use isolated Vitest browser projects on React, Vue and Nuxt.
+See [agent setup and evidence limits](./AGENT_MVP.md).
+
 ## React
 
 - Package: `src/frameworks/react`. React 18 and 19 are both required and

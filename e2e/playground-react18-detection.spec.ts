@@ -1,3 +1,4 @@
+import { registerAgentSuite } from './common-agent-suite'
 import { test, expect } from '@playwright/test'
 import { registerCommonHighlighterSuite } from './common-highlighter-suite'
 import { registerHighlightPanelStateSuite } from './common-highlight-panel-state-suite'
@@ -239,3 +240,5 @@ registerCommonHighlighterSuite(test as any)
 registerHighlightPanelStateSuite(test as any)
 registerLivePropEditSuite(test as any)
 registerListenersReplaySuite(test as any)
+
+registerAgentSuite()

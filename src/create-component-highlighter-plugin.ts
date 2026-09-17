@@ -21,11 +21,14 @@ import {
   type ComponentHighlighterUnpluginHost,
 } from './unplugin'
 import { registerStorybookHubSurfaces } from './hub-setup'
+import { createRuntimeMcp, runtimeMcpMiddleware, type RuntimeAgentOptions } from './agent-mcp'
 
 import type { SerializedRegistryInstance, RegistryDiff } from './shared-types'
 export type { SerializedRegistryInstance, RegistryDiff }
 
 export interface ComponentHighlighterOptions {
+  /** Opt in to read-only runtime MCP. Supply the same bearer token in the agent client. */
+  agent?: RuntimeAgentOptions
   /** URL of the Storybook instance */
   storybookUrl?: string
   /**
@@ -410,7 +413,12 @@ export function createComponentHighlighterPlugin(
   // of these are part of the portable `DevframeNodeContext`, so they're wired
   // here (against the kit-augmented `KitNodeContext`) rather than in the
   // devframe's own `setup(ctx)`. Runs after the devframe-level setup above.
-  const kitSetup = (ctx: KitNodeContext) => {
+  const kitSetup = async (ctx: KitNodeContext) => {
+    if (options.agent && ctx.viteServer) {
+      const mcp = await createRuntimeMcp(ctx, deps, options.agent)
+      ctx.viteServer.middlewares.use(runtimeMcpMiddleware(async () => mcp))
+      ctx.viteServer.httpServer?.once('close', () => { void mcp.dispose() })
+    }
     // The kit advertises Vite's `/@id/{specifier}` client-module-resolution
     // template only when it creates the devtools hub, after every plugin's
     // devtools setup — too late for the registration-time check on a
