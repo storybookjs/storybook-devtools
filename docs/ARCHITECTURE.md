@@ -138,16 +138,21 @@ its menu only includes the separate story-editor action when available. Story
 navigation uses the Storybook channel API
 (`__STORYBOOK_ADDONS_CHANNEL__.emit('setCurrentStory')`).
 
-The Component Highlighter tab's detail pane has a Stories section
-(`buildHighlighterPanel`, `hl-stories-section`) listing the selected
-component's stories as live preview iframes. When Storybook's index also has
-a docs entry for the component, the section header renders a `role="tablist"`
-Stories/Docs tab pair (`buildStoriesHeader`) instead of a plain title; a
-component with no docs entry keeps the plain header, with no Docs tab in the
-DOM. Selecting the Docs tab lazily creates one iframe
-(`<storybookUrl>/iframe.html?viewMode=docs&id=<docsEntryId>`) and toggles it
-against the stories list — the iframe is created once and hidden/shown on
-later switches, never recreated. `findDocsEntry`
+Coverage renders a searchable list of currently connected components, grouped
+by story existence. A row's name opens Properties; its primary action creates
+stories or opens Stories. Secondary actions are in the row menu. Search state
+survives coverage refreshes. Generate all has a panel-wide in-flight guard.
+
+The Component Highlighter detail pane uses peer Properties, Stories, and Docs
+tabs (`buildDetailTabs`) with ARIA tab/panel relationships and roving keyboard
+focus. Properties is the default for a new component instance; Stories contains
+creation and live previews. Docs is omitted unless the index has a matching
+entry. Selecting Docs lazily creates one iframe
+(`<storybookUrl>/iframe.html?viewMode=docs&id=<docsEntryId>`). Tabs hide/show their
+panes without recreating them. Refreshing props for the same instance preserves
+the active tab, draft name, and loaded docs/story frames; a changed story index
+or Storybook running state rebuilds the panes. A build version discards stale
+async renders after a newer selection. `findDocsEntry`
 (`src/utils/story-matching.ts`) decides which entry belongs to the component:
 an `autodocs`-tagged entry (Storybook synthesises it from the stories file,
 so it shares that file's `importPath`/`title`) or an `attached-mdx` entry
@@ -527,7 +532,7 @@ function, the server broadcasts, a client-registered handler acts on the DOM.
 | `scroll-to-component` | `do-scroll-to-component` | Scroll the app page to a component instance and pulse it |
 | `toggle-highlight-visibility` | `do-toggle-highlight-visibility` | Show/hide the selected component's persistent highlight |
 | `highlight-coverage-instances` | `do-highlight-coverage` | Show/clear coverage highlights |
-| `highlight-coverage-batch` | `do-highlight-coverage-batch` | Batch-highlight coverage instances (Preview button) |
+| `highlight-coverage-batch` | `do-highlight-coverage-batch` | Batch-highlight coverage instances (Highlight missing button) |
 | `set-highlight-mode` | `do-set-highlight-mode` | Toggle highlight mode |
 | `set-prop` | `do-set-prop` | Panel live-edits a prop via `__componentHighlighterSetProp` |
 | `reset-prop` | `do-reset-prop` | Panel resets a prop via `__componentHighlighterResetProp` |
@@ -686,6 +691,11 @@ pnpm exec playwright test e2e/common-highlighter-suite.ts
 pnpm exec playwright test -g "listeners-ready registry replay"
 ```
 
+Playwright runs tests within each playground sequentially because panel RPC
+and shared state are server-global. Different playground projects can still
+run concurrently. Close active inspector previews on test ports, or use
+isolated playground ports, to prevent manual sessions from changing test state.
+
 The playgrounds import `client/listeners` eagerly for deterministic E2E
 activation; real consuming apps don't, so their listeners module loads late
 (via the async DevTools client) and misses the initial register events.
@@ -695,7 +705,7 @@ and asserts the runtime replays the full registry with working highlighting.
 
 ## Design follow-ups
 
-Open coverage-list and highlighter-tab design decisions are tracked in
+Coverage-list and highlighter-tab design decisions are documented in
 [DESIGN_FOLLOW_UPS.md](./DESIGN_FOLLOW_UPS.md).
 
 ## Known caveats

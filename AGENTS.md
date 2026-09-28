@@ -102,10 +102,11 @@ iframeDoc?.querySelectorAll('.rail-btn');  // click by .title, e.g. 'Component H
 // Panel-specific elements
 iframeDoc?.getElementById('highlight-toggle');  // highlight mode toggle
 iframeDoc?.querySelectorAll('.cov-item');        // coverage list rows
-iframeDoc?.querySelector('.act-btn[title="Locate component"]');  // scroll-to-component button
+iframeDoc?.querySelector('.cov-search');       // component name/path search
+iframeDoc?.querySelector('.cov-primary-action'); // Create story / View stories
 
-// Component Highlighter detail pane: Stories/Docs tabs (only present when
-// the component has a Storybook docs entry — see docs/ARCHITECTURE.md)
+// Component detail tabs: Properties and Stories always; Docs only with an index entry
+iframeDoc?.querySelector('#hl-properties-tab');       // Properties tab
 iframeDoc?.querySelector('#hl-stories-tab-stories');  // Stories tab
 iframeDoc?.querySelector('#hl-stories-tab-docs');     // Docs tab
 iframeDoc?.querySelector('#hl-stories-panel-docs iframe.hl-docs-iframe');  // embedded docs page
@@ -129,7 +130,8 @@ ctx.rpc.requestTrustWithToken(token);
 
 ### What to verify
 
-- Coverage tab: components show correct visible/not-visible status
+- Coverage tab: lists currently connected components in Needs stories / Has stories;
+  search filters name/path, row names open Properties, View stories opens Stories
 - Coverage `hasStory` decision: matches a real Storybook story index
   (custom titles, stories outside the component's directory) rather than
   only a sibling `Name.stories.*` file; falls back to the sibling-file
@@ -147,14 +149,11 @@ ctx.rpc.requestTrustWithToken(token);
   the name aligns with the component and the badge stays within the viewport
 - Live prop editing (React AND Vue): the pencil on a prop row edits the live app; reset restores the original
 - Registry sync: `(await ctx.rpc.sharedState.get('component-highlighter:registry')).value()` returns the synced instances
-- Stories/Docs tab: a component with a Storybook docs entry (autodocs or
-  attached MDX) shows a Stories/Docs `role="tablist"` in the Stories section
-  header; a component with stories but no docs entry shows the plain
-  "Stories" title with no Docs tab in the DOM. Selecting Docs lazily loads
-  one `iframe.html?viewMode=docs&id=...` iframe and keeps it alive when
-  switching back to Stories and forth again; selecting a different component
-  resets the pane back to the Stories tab (`src/utils/story-matching.ts`'s
-  `findDocsEntry`, `src/panel/panel.ts`'s `buildStoriesHeader`)
+- Inspector tabs: Properties is the default for a new component instance;
+  Stories owns creation and previews. Docs appears only for a matching autodocs
+  or attached MDX entry. Verify arrows/Home/End, one lazy docs iframe retained
+  across tab switches and prop refreshes, and draft name preservation for the
+  same selection (`buildDetailTabs` in `src/panel/panel.ts`).
 
 ### Communication architecture
 

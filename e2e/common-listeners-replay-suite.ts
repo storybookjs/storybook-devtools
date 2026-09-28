@@ -96,7 +96,8 @@ export function registerListenersReplaySuite(test: TestLike) {
 
       const label = page.locator('.ch-highlight-label').first()
       await expect(label).toBeVisible()
-      await expect(label.locator('..')).toHaveCSS('outline-color', 'rgb(0, 109, 235)')
+      // Replay must restore the outline regardless of locally generated stories.
+      await expect(label.locator('..')).toHaveCSS('outline-style', 'solid')
     })
   })
 }

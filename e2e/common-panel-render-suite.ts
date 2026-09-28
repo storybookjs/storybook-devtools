@@ -57,6 +57,31 @@ export function registerPanelRenderSuite(
         opts.componentName,
         { timeout: 20_000 },
       )
+      const search = panel.getByRole('searchbox', { name: 'Find components' })
+      await search.fill('no-component-matches-this')
+      await expect(panel.getByText('No matching components')).toBeVisible()
+      await search.fill(opts.componentName)
+      await expect(panel.locator('.cov-item')).toHaveCount(1)
+      const row = panel.locator('.cov-item')
+      await expect(row.locator('.cov-warning-icon, .cov-check-icon')).toHaveCount(0)
+      await expect(row.getByRole('button', { name: /More actions/ })).toBeVisible()
+      await expect(row.locator('.cov-primary-action')).toHaveText(/Create story|View stories/)
+      await row.getByRole('button', { name: `Inspect ${opts.componentName}`, exact: true }).click()
+      await expect(panel.getByRole('tab', { name: 'Properties', exact: true })).toHaveAttribute('aria-selected', 'true')
+      await expect(panel.locator('#hl-properties-panel')).toBeVisible()
+      await expect(panel.locator('.hl-story-name-row')).toBeHidden()
+      await panel.getByRole('tab', { name: /^Stories/ }).click()
+      await expect(panel.locator('.hl-story-name-row')).toBeVisible()
+      await expect(panel.locator('#hl-properties-panel')).toBeHidden()
+      await panel.getByRole('tab', { name: /^Stories/ }).press('Home')
+      await expect(panel.getByRole('tab', { name: 'Properties', exact: true })).toBeFocused()
+      await panel.getByRole('tab', { name: 'Properties', exact: true }).press('End')
+      await expect(panel.getByRole('tab', { name: /^Stories/ })).toHaveAttribute('aria-selected', 'true')
+      // Search state survives leaving and returning to Coverage.
+      await panel.locator('.rail-btn[title="Coverage"]').click()
+      await expect(search).toHaveValue(opts.componentName)
+      await search.fill('')
+
       await page.evaluate(async () => {
         const w = window as any
         const ctx = w.__VITE_DEVTOOLS_CLIENT_CONTEXT__ || w.__DEVFRAME_HUB_CLIENT_CONTEXT__

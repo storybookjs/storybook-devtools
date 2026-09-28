@@ -408,19 +408,12 @@ html, body, #app {
   margin-top: 16px;
 }
 
-.cov-section-hdr {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--sb-bordercolor-default);
-  margin-bottom: 0;
-}
-
 .cov-section-title {
-  font-size: var(--sb-font-size-s2);
-  font-weight: 600;
-  color: var(--sb-fgcolor-default);
+  padding: 8px;
+  margin: 0;
+  font-size: var(--sb-font-size-s1);
+  font-weight: var(--sb-font-weight-bold);
+  color: var(--sb-fgcolor-muted);
 }
 
 .cov-section-count {
@@ -429,10 +422,31 @@ html, body, #app {
   margin-left: 6px;
 }
 
-.cov-section-actions {
+.cov-toolbar {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  flex-direction: column;
+  gap: 12px;
+  padding-bottom: 16px;
+}
+
+.cov-search {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--sb-bordercolor-default);
+  border-radius: var(--sb-border-radius);
+  background: var(--sb-bgcolor-default);
+  color: var(--sb-fgcolor-default);
+  font-family: var(--sb-font-sans);
+  font-size: var(--sb-font-size-s2);
+}
+
+.cov-search::placeholder { color: var(--sb-fgcolor-muted); }
+
+.cov-bulk-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .cov-preview-btn {
@@ -468,7 +482,7 @@ html, body, #app {
   font-family: var(--sb-font-sans);
   font-size: var(--sb-font-size-s1);
   font-weight: 700;
-  color: #fff;
+  color: var(--sb-fgcolor-inverse);
   background: var(--sb-color-secondary);
   border: none;
   border-radius: var(--sb-border-radius);
@@ -527,69 +541,96 @@ html, body, #app {
 .cov-item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--sb-bordercolor-default);
-  cursor: default;
-  transition: background 0.1s ease;
+  gap: 8px;
+  padding: 8px;
+  border-radius: var(--sb-border-radius);
 }
 
-.cov-item:hover {
-  background: var(--sb-bgcolor-muted);
-}
-
-.cov-item:last-child {
-  border-bottom: none;
+.cov-item:hover, .cov-item:focus-within {
+  background: var(--sb-bgcolor-hover);
 }
 
 .cov-item-info {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
   flex: 1;
+  padding: 0;
+  border: none;
+  border-radius: var(--sb-border-radius);
+  background: transparent;
+  text-align: left;
+  font-family: var(--sb-font-sans);
+  cursor: pointer;
+}
+
+.cov-component-icon {
+  display: flex;
+  flex-shrink: 0;
+  color: var(--sb-color-secondary);
+}
+
+.cov-item-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
 }
 
 .comp-name {
   font-weight: 600;
   color: var(--sb-fgcolor-default);
   font-size: var(--sb-font-size-s2);
-}
-
-.comp-file {
-  font-size: var(--sb-font-size-s1);
-  color: var(--sb-fgcolor-muted);
-  font-family: var(--sb-font-mono);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* Row actions */
+.cov-item-info:hover .comp-name { color: var(--sb-color-secondary); }
+
+.comp-file {
+  font-size: var(--sb-font-size-s1);
+  color: var(--sb-fgcolor-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .cov-item-actions {
   display: flex;
   align-items: center;
   gap: 4px;
   flex-shrink: 0;
-  margin-left: 12px;
 }
 
-.cov-warning-icon {
+.cov-primary-action {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  color: var(--sb-fgcolor-warning);
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--sb-bordercolor-default);
+  border-radius: var(--sb-border-radius);
+  background: var(--sb-bgcolor-default);
+  color: var(--sb-color-secondary);
+  font-family: var(--sb-font-sans);
+  font-size: var(--sb-font-size-s1);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
 }
 
-.cov-check-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  color: var(--sb-fgcolor-positive);
+.cov-primary-action:hover { background: var(--sb-bgcolor-hover); }
+.cov-primary-action:disabled { opacity: 0.5; cursor: wait; }
+.cov-primary-action svg { width: 12px; height: 12px; }
+
+.cov-search:focus-visible,
+.cov-item button:focus-visible,
+.hl-detail-tab:focus-visible {
+  outline: 2px solid var(--sb-color-secondary);
+  outline-offset: 2px;
 }
 
 .act-btn {
@@ -616,14 +657,6 @@ html, body, #app {
   opacity: 0.5;
   cursor: not-allowed;
   pointer-events: none;
-}
-
-.act-btn.more-btn {
-  visibility: hidden;
-}
-
-.cov-item:hover .act-btn.more-btn {
-  visibility: visible;
 }
 
 .act-popover {
@@ -1025,39 +1058,42 @@ html, body, #app {
 .hl-stories-body::-webkit-scrollbar { width: 4px; }
 .hl-stories-body::-webkit-scrollbar-thumb { background: var(--sb-bordercolor-default); border-radius: 2px; }
 
-/* Stories / Docs tabs */
-.hl-stories-tabs {
+/* Inspector tabs stay visible while each detail pane scrolls independently. */
+.hl-detail-tabs {
   display: flex;
-  gap: 4px;
+  flex-shrink: 0;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--sb-bordercolor-default);
 }
 
-.hl-stories-tab {
+.hl-detail-tab {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  height: 26px;
-  padding: 0 10px;
+  height: 40px;
+  padding: 0 12px;
+  border: none;
+  border-bottom: 3px solid transparent;
   background: transparent;
   color: var(--sb-fgcolor-muted);
-  border: 1px solid var(--sb-bordercolor-default);
-  border-radius: var(--sb-border-radius);
   font-family: var(--sb-font-sans);
   font-size: var(--sb-font-size-s2);
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 
-.hl-stories-tab:hover {
-  background: var(--sb-bgcolor-hover);
-  color: var(--sb-bar-hover);
-}
-
-.hl-stories-tab[aria-selected="true"] {
-  background: var(--sb-bgcolor-hover);
-  border-color: var(--sb-color-secondary);
+.hl-detail-tab:hover { color: var(--sb-bar-hover); }
+.hl-detail-tab[aria-selected="true"] {
   color: var(--sb-bar-selected);
+  border-bottom-color: var(--sb-bar-selected);
 }
+
+.hl-properties-panel {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.hl-root > [hidden] { display: none; }
 
 /* Docs tab body — the iframe fills the remaining pane height and scrolls
    its own document; this container never scrolls itself. */

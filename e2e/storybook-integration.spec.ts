@@ -39,6 +39,12 @@ test('panel launch, real story writes and preview', async ({ page }, testInfo) =
     const panel = page.frameLocator('devframes-dock-embedded iframe')
     await expect(panel.locator('.rail-btn').first()).toBeVisible({ timeout: 20_000 })
 
+    await panel.locator('.rail-btn[title="Coverage"]').click()
+    await panel.getByRole('searchbox', { name: 'Find components' }).fill('Button')
+    await expect(panel.getByRole('button', { name: 'Create story for Button', exact: true })).toBeVisible()
+    await expect(panel.getByRole('button', { name: 'Generate all', exact: true })).toBeVisible()
+    await panel.locator('.rail-btn[title="Storybook"]').click()
+
     const data = {
       meta: {
         componentName: 'Button',
@@ -84,6 +90,9 @@ test('panel launch, real story writes and preview', async ({ page }, testInfo) =
     expect(source).toContain(`from '${framework}'`)
     expect(await rpc(page, 'component-highlighter:check-story', { componentPath })).toMatchObject({ hasStory: true })
 
+    // Include a real docs entry to exercise the inspector's lazy Docs pane.
+    fs.writeFileSync(story, source.replace(/component: Button,?/, "component: Button, tags: ['autodocs'],"))
+
     // Only take ownership of the process started by this test.
     expect(await rpc(page, 'component-highlighter:storybook-status')).toMatchObject({ running: false })
     await panel.locator('#sb-start-btn').click()
@@ -115,6 +124,50 @@ test('panel launch, real story writes and preview', async ({ page }, testInfo) =
       'data-peer-review-play', 'passed', { timeout: 15_000 },
     )
     await preview.close()
+
+    // Inspector tabs separate props, creation/previews, and the full docs page.
+    await panel.locator('.rail-btn[title="Coverage"]').click()
+    await panel.getByRole('searchbox', { name: 'Find components' }).fill('Button')
+    await panel.getByRole('button', { name: 'View stories for Button', exact: true }).click()
+    await expect(panel.getByRole('tab', { name: /^Stories/ })).toHaveAttribute('aria-selected', 'true')
+    await panel.getByRole('tab', { name: 'Properties', exact: true }).click()
+    const selection = await page.evaluate(() => {
+      const entries = [...(window as any).__componentHighlighterRegistry.values()]
+      const entry = entries.find((entry: any) => entry.meta.componentName === 'Button')
+      return { id: entry.id, meta: entry.meta, serializedProps: entry.serializedProps, isConnected: true }
+    })
+    await rpc(page, 'component-highlighter:select-component', selection)
+    await expect(panel.getByRole('tab', { name: 'Properties', exact: true })).toHaveAttribute('aria-selected', 'true')
+    await expect(panel.locator('.hl-docs-iframe')).toHaveCount(0)
+    await panel.getByRole('tab', { name: 'Docs', exact: true }).click()
+    const docs = panel.locator('.hl-docs-iframe')
+    await expect(docs).toBeVisible()
+    await expect(docs).toHaveAttribute('src', /viewMode=docs&id=/)
+    await docs.evaluate(el => el.setAttribute('data-preserved', 'true'))
+    await panel.getByRole('tab', { name: /^Stories/ }).click()
+    await expect(docs).toBeHidden()
+    const nameInput = panel.getByRole('textbox', { name: 'Story name' })
+    await nameInput.fill('Unsaved draft')
+    await panel.getByRole('tab', { name: 'Properties', exact: true }).click()
+    // A props refresh must retain pane state and avoid replacing loaded iframes.
+    await rpc(page, 'component-highlighter:select-component', {
+      ...selection, serializedProps: { ...selection.serializedProps, designCheck: 'updated' },
+    })
+    await expect(panel.locator('#hl-properties-panel')).toContainText('designCheck')
+    await panel.getByRole('tab', { name: 'Docs', exact: true }).click()
+    await expect(docs).toBeVisible()
+    await expect(docs).toHaveAttribute('data-preserved', 'true')
+    await panel.getByRole('tab', { name: /^Stories/ }).click()
+    await expect(nameInput).toHaveValue('Unsaved draft')
+    await expect(panel.locator('#hl-properties-panel')).toBeHidden()
+    // A new instance resets to Properties, with unavailable Docs omitted.
+    await rpc(page, 'component-highlighter:select-component', {
+      ...selection, id: 'no-docs-selection',
+      meta: { ...selection.meta, componentName: 'NoDocs', filePath: '/NoDocs.tsx', relativeFilePath: 'NoDocs.tsx' },
+    })
+    await expect(panel.getByRole('tab', { name: 'Properties', exact: true })).toHaveAttribute('aria-selected', 'true')
+    await expect(panel.getByRole('tab', { name: 'Docs', exact: true })).toHaveCount(0)
+    await expect(panel.getByRole('tab', { name: /^Stories/ })).toBeVisible()
 
     // External deletion must be visible even outside the app import graph.
     fs.unlinkSync(story)

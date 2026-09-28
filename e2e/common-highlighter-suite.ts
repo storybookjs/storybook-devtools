@@ -93,8 +93,9 @@ export function registerCommonHighlighterSuite(test: TestLike) {
 
       const hovered = page.locator('.ch-highlight-label').first()
       await expect(hovered).toBeVisible()
-      await expect(hovered.locator('.ch-label-badge')).toBeHidden()
-      await expect(hovered.locator('..')).toHaveCSS('outline-color', 'rgb(0, 109, 235)')
+      // Story existence varies when users generate stories in the playground.
+      // The controlled stories=true/false cases above cover exact colors.
+      await expect(hovered.locator('..')).toHaveCSS('outline-style', 'solid')
     })
 
     test('hide highlights hides only the selection and keeps hover/select working', async ({ page }) => {

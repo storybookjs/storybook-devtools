@@ -10,7 +10,7 @@ Dev-server devtools for visual component highlighting and automatic Storybook st
 - **Props Serialization** - Serializes JSX children, Vue slots, nested components, and reactive objects
 - **Append to Existing Stories** - Add new story variants to existing story files
 - **Smart Imports** - Automatically resolves and adds component imports
-- **DevTools Integration** - Dock panel with Storybook, Coverage, Terminal, and Docs tabs
+- **DevTools Integration** - Dock panel with Storybook, Component Highlighter, Coverage, and About tabs
 - **Coverage Dashboard** - Track story coverage across all detected components using the Storybook index, refreshed after story-file edits on every host
 - **Copy Prompt** - Copy LLM-friendly component context to clipboard for AI-assisted development
 - **Development Only** - Never runs in production builds
@@ -285,26 +285,33 @@ Generated files are formatted with your project's prettier when you have one ins
 
 ### Stories and Docs
 
-The component inspector's **Stories** section lists every story matching the
-selected component as a live embedded preview. When Storybook's index has a
-docs page for that component — an `autodocs`-tagged stories file, or an
-MDX file attached to it via `<Meta of={ComponentStories} />` — the section
-header becomes a **Stories** / **Docs** tab pair; selecting **Docs** embeds
-the component's full docs page (an `iframe.html?viewMode=docs&id=...` iframe)
-in place of the story previews. A component with no docs page keeps the
-plain "Stories" header. When both an autodocs page and an attached MDX page
-exist for the same component, the attached MDX page is shown — that's what
-Storybook's own sidebar renders as the component's docs.
+The component inspector has **Properties**, **Stories**, and (when available)
+**Docs** tabs. Properties opens first when selecting a different component
+instance. Stories contains the story-name field, **Create story** action,
+and live previews. Switching tabs preserves the draft name and loaded docs;
+refreshing props keeps the active tab for the same selection.
+Arrow keys, Home, and End move between tabs.
+
+Docs appears when Storybook's index contains an autodocs page or attached
+MDX for the component. It loads on first selection and stays mounted while
+hidden. If both exist, attached MDX takes precedence, matching Storybook's
+sidebar. Components without docs omit the Docs tab.
 
 ### Coverage Dashboard
 
-The **Coverage** tab shows a progress bar, a table of all detected
-components with their story status, and visibility indicators for what's
-currently rendered. **Generate all** generates stories for every visible uncovered
-component instance, deduplicating by props fingerprint; per-component
-buttons create one story at a time. When several instances share a
-fingerprint, the one with live prop edits is used, and the creation toast
-names which instance the story came from. Bulk generation shows one summary
+The **Coverage** tab shows components currently rendered on the page, grouped
+under **Needs stories** and **Has stories**, with a coverage percentage.
+Search by component name or file path. Click a component name to inspect its
+properties. Each row has one labeled primary action: **Create story** for an
+uncovered component, or **View stories** to open the inspector's Stories tab.
+The always-visible menu holds secondary actions such as opening source files
+and locating the component. Separate status icons are omitted.
+
+**Highlight missing** highlights uncovered components on the page.
+**Generate all** generates stories for every visible uncovered component
+instance, deduplicating by props fingerprint. Per-component creation uses
+the same deduplication for that component. When instances share a fingerprint,
+the one with live prop edits is used. Bulk generation shows one summary
 notification with the number of stories created and any failures. Notifications
 use Storybook’s compact inverse colors in light and dark mode.
 

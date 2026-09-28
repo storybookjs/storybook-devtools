@@ -1,20 +1,23 @@
 # Designer follow-ups
 
-The concrete notification, navigation, hover and editor-action fixes are
-implemented separately from these open design decisions. These items still
-need an agreed design and are not marked as implemented.
+The coverage and inspector iteration addresses the four follow-ups:
 
-- **Coverage list patterns:** compare the hierarchy, rows and spacing with
-  Storybook’s existing lists and choose the matching pattern.
-- **Coverage actions:** clarify the primary row action and the placement of
-  secondary actions, including the relationship to bulk generation.
-- **Coverage status:** decide whether to combine status with the create-story
-  button or remove redundant status icons. If a status becomes an action,
-  define its click behavior and accessible label.
-- **Highlighter content:** explore Properties / Docs / Stories as peer tabs.
-  Define the initial tab, behavior when docs or stories are absent, and
-  whether switching components preserves the active tab. The current
-  Properties section and contextual Stories/Docs tabs remain in place.
+- **Coverage list patterns:** compact component rows, Storybook tokens, clear
+  group headings, name/path search, and keyboard-visible focus.
+- **Coverage actions:** the component name opens Properties. A labeled primary
+  action creates stories or opens Stories; an always-visible menu holds
+  secondary actions. Bulk actions live above the list and apply to all visible
+  uncovered components, independent of the search filter.
+- **Coverage status:** separate warning/check icons are removed. Needs stories /
+  Has stories headings and Create story / View stories actions communicate the
+  state and available next step together.
+- **Highlighter content:** Properties, Stories, and Docs are peer tabs.
+  Properties opens first for a new instance. Stories owns creation and previews;
+  Docs is omitted when unavailable and loads only when selected. Switching tabs
+  or refreshing props preserves the same instance's draft and loaded frames.
 
-Review candidates in both light and dark mode, at narrow dock widths, and
-with uncovered, covered and multiply rendered components in React and Vue.
+The shared panel browser suite covers search, actions, tab visibility, and
+keyboard navigation across all six playgrounds. The serial Storybook suite
+covers real autodocs entries, lazy iframe preservation, draft preservation,
+and new-selection resets. Review the visual treatment in light/dark themes
+and at narrow dock widths when changing these patterns.
