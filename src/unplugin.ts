@@ -176,12 +176,6 @@ function buildComponentHighlighterUnpluginOptions(
 
   const paths = getComponentHighlighterRuntimePaths(framework)
 
-  const logDebug = (...args: unknown[]) => {
-    if (debugMode) {
-      console.log('[component-highlighter]', ...args)
-    }
-  }
-
   function runTransform(
     code: string,
     id: string,

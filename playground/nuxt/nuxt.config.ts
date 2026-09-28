@@ -47,6 +47,10 @@ export default defineNuxtConfig({
       enabled: true,
       clientAuth: false,
     },
+    // Unlike a plain Vite project, Nuxt's own `@nuxt/vite-builder` does not
+    // trigger Vite's native `devtools.enabled` dev-server integration, so
+    // the dock never mounts without registering the `DevTools()` plugin
+    // here explicitly.
     plugins: [
       isStorybook ? null : DevTools(),
       isStorybook

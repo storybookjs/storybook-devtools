@@ -378,8 +378,19 @@ session stays registered for its scrollback; the next start respawns it.
 
 Open-in-editor goes through the `@devframes/service-open` wire service,
 registered on every host as `devframes:service:open:open-in-editor`. The
-panel and overlay feature-detect it and fall back to Vite's
-`/__open-in-editor` endpoint when unavailable.
+panel and overlay feature-detect it (`hasOpenService()` in
+`src/client/overlay.ts`, checking the synced `devframes:services` shared
+state) and fall back to Vite's `/__open-in-editor` endpoint only when no
+install of the service has advertised itself at all.
+
+On the Vite host, `@vitejs/devtools` mounts `@devframes/plugin-messages`,
+which declares the same wire service and installs it before this plugin's
+devframe mounts. The two mounts do not share a service registry, so this
+plugin's install registers the same RPC function a second time; devframe
+rejects it with a non-fatal `DF0021` diagnostic and keeps the first
+registration. On that host the service therefore runs with
+`plugin-messages`' options, not this plugin's `roots`. Rsbuild and Next own
+their hub, so this plugin's installation is the only one there.
 
 ## Key modules (where to edit)
 

@@ -29,7 +29,7 @@ yarn add @storybook/experimental-devtools
 ### Peer Dependencies
 
 - `storybook` >= 10.6.0
-- One bundler host: `vite` >= 5.0.0 with `@vitejs/devtools` >= 0.6.0, `@rsbuild/core` >= 1.1.7, or `next` (App Router, webpack dev)
+- One bundler host: `vite` >= 5.0.0 with `@vitejs/devtools` >= 0.7.6, `@rsbuild/core` >= 1.1.7, or `next` (App Router, webpack dev)
 - One of: `react` >= 18.0.0 or `vue` >= 3.0.0
 
 ## Quick Start
@@ -69,6 +69,17 @@ export default defineConfig({
   ],
 })
 ```
+
+> On Vite >= 8.3, setting `devtools: { enabled: true }` in the Vite config
+> makes Vite mount `@vitejs/devtools` itself. Use either that option or the
+> `DevTools()` plugin, not both — registering both fails with `DTK0034`.
+> Nuxt is the exception: it needs the explicit `DevTools()` plugin.
+>
+> Storybook's own Vite builder loads this same config file when it runs, so
+> both the `DevTools()` plugin above and `devtools: { enabled: true }` need
+> gating (e.g. `process.env.STORYBOOK ? null : DevTools()`, or
+> `enabled: !process.env.STORYBOOK`) — otherwise Storybook mounts a second,
+> unrelated devframe hub.
 
 ### Nuxt SSR
 
