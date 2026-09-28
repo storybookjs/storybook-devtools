@@ -45,11 +45,11 @@ describe('runtime agent MCP', () => {
     return result.isError ? result : JSON.parse(result.content[0].text)
   }
 
-  it('exposes exactly three read-only tools with schemas and no shared-state resources', async () => {
+  it('exposes exactly four read-only tools with schemas and no shared-state resources', async () => {
     const call = await setup()
     const { tools } = await call('tools/list')
     expect(tools.map((t: any) => t.name).sort()).toEqual([
-      'storybook-devtools_get-app-context', 'storybook-devtools_get-story-gaps', 'storybook-devtools_inspect-component',
+      'storybook-devtools_get-app-context', 'storybook-devtools_get-component-tree', 'storybook-devtools_get-story-gaps', 'storybook-devtools_inspect-component',
     ])
     expect(tools.every((t: any) => t.annotations.readOnlyHint && !t.annotations.destructiveHint)).toBe(true)
     expect(tools.find((t: any) => t.name.endsWith('inspect-component')).inputSchema.required).toEqual(['pageId', 'instanceId'])
@@ -79,6 +79,16 @@ describe('runtime agent MCP', () => {
     expect((await tool(call, 'inspect-component', { instanceId: 'button-1' })).isError).toBe(true)
   })
 
+  it('inspects rendered React wrappers without a highlighter DOM anchor', async () => {
+    const fixture = page()
+    fixture.instances[0]!.isConnected = false
+    fixture.instances[0]!.isRendered = true
+    const result = await tool(await setup([fixture]), 'inspect-component', { pageId: 'page-a', instanceId: 'button-1' })
+    expect(result.instance.serializedProps).toEqual({ disabled: true })
+    fixture.instances[0]!.isRendered = false
+    expect((await tool(await setup([fixture]), 'inspect-component', { pageId: 'page-a', instanceId: 'button-1' })).isError).toBe(true)
+  })
+
   it('reports gaps only among this page’s mounted components, with index provenance', async () => {
     const result = await tool(await setup(), 'get-story-gaps', { pageId: 'page-a' })
     expect(result.components.map((c: any) => c.componentName)).toEqual(['Card'])
@@ -88,6 +98,25 @@ describe('runtime agent MCP', () => {
     const stale = await tool(await setup([page()], 'stale'), 'get-story-gaps', { pageId: 'page-a' })
     expect(stale.status).toBe('index-unavailable')
     expect(stale.components).toEqual([])
+  })
+
+  it('returns a page-scoped React tree and reports unsupported runtimes explicitly', async () => {
+    const fixture = page()
+    fixture.componentTree = {
+      framework: 'react', rootIds: ['card-1'], totalNodes: 2, truncated: false,
+      nodes: [
+        { id: 'card-1', parentId: null, meta: fixture.instances[1]!.meta },
+        { id: 'button-1', parentId: 'card-1', meta: fixture.instances[0]!.meta },
+      ],
+    }
+    const result = await tool(await setup([fixture]), 'get-component-tree', { pageId: 'page-a' })
+    expect(result.status).toBe('ok')
+    expect(result.scope).toBe('rendered-page')
+    expect(result.nodes[1].parentId).toBe('card-1')
+    expect(result.nodes[1]).not.toHaveProperty('serializedProps')
+    expect((await tool(await setup(), 'get-component-tree', { pageId: 'page-a' })).status).toBe('unsupported-framework')
+    expect((await tool(await setup(), 'get-component-tree', { pageId: 'closed' })).isError).toBe(true)
+    expect((await tool(await setup(), 'get-component-tree')).isError).toBe(true)
   })
 
   it('bounds unresponsive peers and skips untrusted connections without losing healthy pages', async () => {

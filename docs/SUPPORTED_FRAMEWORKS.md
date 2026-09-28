@@ -25,6 +25,8 @@ The read-only runtime MCP MVP is exercised across all six playgrounds, including
 React 18 and both SSR hosts. Storybook MCP is installed in the five playgrounds
 with Storybook configuration; React 18 retains its intentional no-config fallback.
 MCP story tests use isolated Vitest browser projects on React, Vue and Nuxt.
+The rendered-page component-tree tool is React-only initially, covering React
+18/19 on Vite, Rsbuild and Next. Vue/Nuxt report unsupported rather than an empty tree.
 See [agent setup and evidence limits](./AGENT_MVP.md).
 
 ## React

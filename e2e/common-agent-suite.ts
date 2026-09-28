@@ -37,7 +37,7 @@ export function registerAgentSuite() {
         return JSON.parse(result.content[0].text)
       }
       const tools = await callMcp(request, endpoint, 'tools/list')
-      expect(tools.tools).toHaveLength(3)
+      expect(tools.tools).toHaveLength(4)
       expect(tools.tools.every((t: any) => t.annotations.readOnlyHint)).toBe(true)
       expect((await callMcp(request, endpoint, 'resources/list')).resources).toEqual([])
       let context: any
@@ -72,6 +72,61 @@ export function registerAgentSuite() {
       }).toBe(inspected.instance.serializedProps.count + 1)
       const denied = await request.post(endpoint, { headers: { Origin: new URL(endpoint).origin }, data: { jsonrpc: '2.0', id: 1, method: 'tools/list' } })
       expect(denied.status()).toBe(401)
+    })
+
+    test('returns the rendered React component tree with fresh modal membership', async ({ page, request, baseURL }, testInfo) => {
+      const endpoint = `${baseURL}${testInfo.project.name.startsWith('next') ? '/__devframes/storybook-devtools/mcp' : '/__storybook-devtools/mcp'}`
+      await page.goto('/')
+      const route = `/mcp-tree-${testInfo.testId}`
+      await expect.poll(async () => page.evaluate(route => {
+        if (!(window as any).__componentHighlighterRegistry?.size) return false
+        history.replaceState(null, '', route)
+        return true
+      }, route).catch(() => false)).toBe(true)
+      const call = async (name: string, args = {}) => {
+        const response = await callMcp(request, endpoint, 'tools/call', { name: `storybook-devtools_${name}`, arguments: args })
+        expect(response.isError, JSON.stringify(response)).not.toBe(true)
+        return JSON.parse(response.content[0].text)
+      }
+      let target: any
+      await expect.poll(async () => {
+        const context = await call('get-app-context')
+        target = context.pages.find((p: any) => p.url.endsWith(route))
+        return !!target
+      }).toBe(true)
+      const query = () => call('get-component-tree', { pageId: target.pageId })
+      const tree = await query()
+      if (/^(vue|nuxt)-/.test(testInfo.project.name)) {
+        expect(tree.status).toBe('unsupported-framework')
+        return
+      }
+      expect(tree.status).toBe('ok')
+      expect(tree.scope).toBe('rendered-page')
+      const taskList = tree.nodes.find((n: any) => n.meta.componentName === 'TaskList')
+      const cards = tree.nodes.filter((n: any) => n.meta.componentName === 'TaskCard')
+      expect(cards).toHaveLength(3)
+      expect(cards.every((n: any) => n.parentId === taskList.id)).toBe(true)
+      expect(new Set(cards.map((n: any) => n.id)).size).toBe(3)
+      expect(tree.nodes.every((n: any) => !('serializedProps' in n))).toBe(true)
+      expect(tree.nodes.every((n: any) => n.parentId === null || tree.nodes.some((p: any) => p.id === n.parentId))).toBe(true)
+      expect(tree.nodes.some((n: any) => n.meta.componentName === 'Modal')).toBe(false)
+      // The last task card is outside this short viewport, but is still rendered.
+      await page.setViewportSize({ width: 900, height: 200 })
+      expect((await query()).nodes.filter((n: any) => n.meta.componentName === 'TaskCard')).toHaveLength(3)
+      await page.getByRole('button', { name: '+ New Task' }).click()
+      let opened: any
+      await expect.poll(async () => {
+        opened = await query()
+        return opened.nodes.some((n: any) => n.meta.componentName === 'TaskForm')
+      }).toBe(true)
+      const modal = opened.nodes.find((n: any) => n.meta.componentName === 'Modal')
+      const form = opened.nodes.find((n: any) => n.meta.componentName === 'TaskForm')
+      expect(form.parentId).toBe(modal.id)
+      await page.getByRole('button', { name: 'Close modal', exact: true }).click()
+      await expect.poll(async () => (await query()).nodes.some((n: any) => n.id === form.id)).toBe(false)
+      const after = await query()
+      expect(after.nodes.find((n: any) => n.meta.componentName === 'TaskList').id).toBe(taskList.id)
+      expect(after.nodes.some((n: any) => n.meta.componentName === 'Modal')).toBe(false)
     })
 
     test('isolates two browser pages and rejects an instance after its page closes', async ({ page, context, request, baseURL }, testInfo) => {

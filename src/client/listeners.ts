@@ -1,5 +1,5 @@
 import type { ComponentInstance } from '../frameworks/types'
-import type { SerializedRegistryInstance, RegistryDiff } from '../shared-types'
+import type { SerializedRegistryInstance, RegistryDiff, RenderedComponentTree } from '../shared-types'
 import { getHostClientContext } from './utils/host-context'
 import {
   getActiveSurface,
@@ -44,6 +44,7 @@ declare global {
     __componentHighlighterEnable?: () => void
     __componentHighlighterDisable?: () => void
     __componentHighlighterIsActive?: () => boolean
+    __componentHighlighterGetComponentTree?: (maxNodes?: number) => RenderedComponentTree
   }
 }
 
@@ -145,12 +146,18 @@ function autoInitRpc() {
             handler: (query) => {
               // Prop tracking is enabled only after this page is trusted.
               if (!rpcCallFn || (query.pageId && query.pageId !== runtimePageId)) return null
-              const mounted = [...componentRegistry.values()].filter(i => i.element?.isConnected)
+              const getTree = window.__componentHighlighterGetComponentTree
+              // A tree node can be a fragment, text-only component, or a
+              // transparent wrapper without a highlighter element of its own.
+              const renderedIds = query.instanceId && getTree
+                ? new Set(getTree(Infinity).nodes.map(node => node.id)) : undefined
+              const mounted = [...componentRegistry.values()].filter(i => i.element?.isConnected || renderedIds?.has(i.id))
               const selected = getHighlightActor().getSnapshot().context.selectedComponentId
               const matches = query.instanceId ? mounted.filter(i => i.id === query.instanceId) : mounted
               let propsTruncated = false
               const instances = matches.slice(0, 200).map(instance => {
                 const data = serializeInstance(instance)
+                if (renderedIds) data.isRendered = renderedIds.has(instance.id)
                 if (!query.instanceId) delete data.serializedProps
                 else if (JSON.stringify(data.serializedProps ?? {}).length > 32_000) {
                   delete data.serializedProps
@@ -162,6 +169,8 @@ function autoInitRpc() {
                 pageId: runtimePageId, url: location.origin + location.pathname,
                 capturedAt: new Date().toISOString(), selectedInstanceId: selected,
                 instances, totalInstances: mounted.length, truncated: matches.length > instances.length, propsTruncated,
+                componentTreeSupported: !!getTree,
+                ...(query.includeTree && getTree ? { componentTree: getTree() } : {}),
               }
             },
           })

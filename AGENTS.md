@@ -158,9 +158,14 @@ Do not build concurrently with tests; the build clears that directory.
 
 Runtime MCP changes must also preserve the shared `e2e/common-agent-suite.ts`
 coverage on all six hosts: page-scoped identity, fresh snapshots, closed pages,
-read-only tool discovery, and authorization. Runtime MCP complements Storybook
-MCP; validate the latter through the serial suite below. If unrelated projects
-occupy the standard playground ports, set `E2E_PORT_OFFSET=1000` on the Playwright
+read-only tool discovery, and authorization. The rendered component tree is
+React-only initially: verify ancestry, offscreen membership, stable IDs, modal
+mount/unmount, and explicit unsupported Vue/Nuxt responses in the shared agent
+suite. Tree unit tests additionally cover
+portals, fragments, text output, transparent ancestors and truncation. Runtime
+MCP complements Storybook MCP; validate the latter through the serial suite below.
+If unrelated projects occupy the standard playground ports, set
+`E2E_PORT_OFFSET=1000` on the Playwright
 commands; this moves the app servers to 6173–6178. Set `E2E_STORYBOOK_PORT=6016`
 to move the serial suite's Storybook server too. Keep that port free.
 

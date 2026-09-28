@@ -312,8 +312,8 @@ replace there.
 
 ### Optional runtime MCP
 
-`src/agent.ts` defines three read-only tools: app context, exact instance
-inspection, and mounted story gaps. `src/agent-mcp.ts` serves Devframe's MCP
+`src/agent.ts` defines four read-only tools: app context, exact instance
+inspection, rendered React component tree, and mounted story gaps. `src/agent-mcp.ts` serves Devframe's MCP
 adapter from an isolated agent context; its closures query the existing host
 RPC. No hub commands, write RPCs, or shared-state resources are exposed. The
 `agent` plugin option opts in with a bearer token; Next accepts it on its route
@@ -328,6 +328,19 @@ avoiding the shared registry's cross-tab replacement behavior. Props are returne
 only for exact instance inspection, with payload limits. `StoryIndex.source`
 reports `storybook`, `scan`, or `stale`; stale indexes cannot establish gaps.
 See [the MVP contract and limitations](./AGENT_MVP.md).
+
+For tree requests, the React runtime exposes
+`window.__componentHighlighterGetComponentTree(maxNodes = 500)`. It retains roots
+with instrumented instances, removes empty roots on unmount commits, and uses
+`src/frameworks/react/component-tree.ts` to traverse current fibers. The existing
+`fibersById` map supplies identities (including memo/forwardRef deduplication).
+DOM-connected element/text output marks a component and its ancestors as
+rendered; there are no layout or viewport checks. Parent-first output is capped
+without orphaning descendants. The snapshot RPC advertises support per page and
+includes this tree only when requested. Exact React inspection also checks the
+rendered tree, so transparent wrappers/text-only components remain inspectable
+without changing the highlighter's DOM-anchor registry behavior. Other runtimes
+return an explicit unsupported status from the tree tool.
 
 | Host | Entry file | Instrumentation mount | Hook delivery | Dock/panel serving |
 |------|-----------|------------------------|---------------|---------------------|

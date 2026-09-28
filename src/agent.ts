@@ -1,6 +1,6 @@
 import * as path from 'node:path'
 import type { DevframeNodeContext } from 'devframe'
-import type { SerializedRegistryInstance } from './shared-types'
+import type { SerializedRegistryInstance, RenderedComponentTree } from './shared-types'
 import type { StoryIndex } from './story-index'
 import { findStoryCandidates } from './utils/story-matching'
 
@@ -14,9 +14,11 @@ export interface RuntimePage {
   truncated: boolean
   instances: SerializedRegistryInstance[]
   propsTruncated?: boolean
+  componentTreeSupported?: boolean
+  componentTree?: RenderedComponentTree
 }
 
-export interface RuntimeQuery { pageId?: string; instanceId?: string }
+export interface RuntimeQuery { pageId?: string; instanceId?: string; includeTree?: boolean }
 export interface RuntimePages { pages: RuntimePage[]; unavailableClients: number }
 
 const coverageMeaning = 'Story presence only, not test coverage or proof that a story reproduces these props. Matching may use filename/title heuristics.'
@@ -50,8 +52,8 @@ export function registerRuntimeTools(ctx: DevframeNodeContext, deps: {
       },
     })
   }
-  async function readPage(args: Record<string, string>) {
-    const result = await deps.getPages(args)
+  async function readPage(args: Record<string, string>, includeTree = false) {
+    const result = await deps.getPages({ ...args, ...(includeTree ? { includeTree: true } : {}) })
     const page = result.pages.find(p => p.pageId === args['pageId'])
     if (!page) throw new Error('Page unavailable. Open and authorize the app, then call get-app-context again. No cached data was used.')
     return page
@@ -70,9 +72,25 @@ export function registerRuntimeTools(ctx: DevframeNodeContext, deps: {
       limitations: ['Mounted means DOM-connected, not viewport-visible.', 'Only instrumented client components are included; server components and uninstrumented modules are absent.', 'Each page is captured independently; this is not an atomic cross-page snapshot.'],
     }
   })
+  register('get-component-tree', 'Get the rendered React component hierarchy for a chosen page, including offscreen and CSS-hidden DOM. Returns a parent-first forest of instrumented instances with source files and IDs, without props. Includes transparent ancestors with rendered descendants; omits components with no connected DOM output. Parent relationships follow React, including portals, not DOM nesting. React only; other runtimes return an explicit unsupported status.', ['pageId'], async args => {
+    const page = await readPage(args, true)
+    const context = { pageId: page.pageId, url: page.url, capturedAt: page.capturedAt, scope: 'rendered-page' }
+    if (!page.componentTree) return {
+      ...context, status: 'unsupported-framework',
+      message: 'Component trees currently require the React runtime. Vue/Nuxt support is not implemented.',
+    }
+    return {
+      ...context, status: 'ok', ...page.componentTree,
+      limitations: [
+        'Only instrumented client components appear; parentId skips uninstrumented ancestors and server components.',
+        'Rendered means connected DOM output in the committed React subtree, including offscreen and CSS-hidden content; it is not a visibility check.',
+        'At most 500 nodes are returned in parent-first order. Check totalNodes and truncated before treating the tree as complete.',
+      ],
+    }
+  })
   register('inspect-component', 'Inspect one exact component instance from get-app-context: current serialized runtime props, source identity, live edits and matching stories. Select the page explicitly. Props are lossy snapshots, not component API documentation; use Storybook MCP for docs.', ['pageId', 'instanceId'], async args => {
     const page = await readPage(args)
-    const instance = page.instances.find(i => i.id === args['instanceId'] && i.isConnected)
+    const instance = page.instances.find(i => i.id === args['instanceId'] && (i.isConnected || i.isRendered))
     if (!instance) throw new Error('Instance no longer mounted. Call get-app-context again.')
     const index = await deps.getIndex()
     return {

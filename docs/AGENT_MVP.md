@@ -25,7 +25,7 @@ client with the matching `Authorization: Bearer <token>` header and a loopback
 | Vite / Nuxt / Rsbuild | `/__storybook-devtools/mcp` on the app server |
 | Next | `/__devframes/storybook-devtools/mcp` (uses the configured hub base) |
 
-The feature is opt-in. The separate endpoint exposes only three read-only tools,
+The feature is opt-in. The separate endpoint exposes only four read-only tools,
 without the hub's terminals, story-writing actions, or shared-state resources.
 It uses Devframe's `ctx.agent.registerTool` and `createMcpFetchHandler` with a
 dedicated agent context whose handlers query the existing application RPC hub.
@@ -50,6 +50,44 @@ that fixed value is for local examples/E2E, not shared environments.
    `/mcp` endpoint returned by runtime tools is explicitly unverified: projects
    can customize that path or have no MCP addon installed.
 
+For React, call `storybook-devtools_get-component-tree` with `{ pageId }` to
+discover the hierarchy of components currently rendered anywhere in the page.
+There is no viewport filter. Connected offscreen and CSS-hidden DOM are included.
+React 18/19 on Vite, Rsbuild and Next are supported; Vue/Nuxt return
+`status: "unsupported-framework"`. App discovery advertises
+`componentTreeSupported` per page.
+
+The result is a compact, parent-first forest:
+
+```json
+{
+  "status": "ok",
+  "scope": "rendered-page",
+  "framework": "react",
+  "rootIds": ["app:0"],
+  "nodes": [
+    { "id": "app:0", "parentId": null, "meta": { "componentName": "App", "sourceId": "app", "filePath": "/app/App.tsx" } },
+    { "id": "card:1", "parentId": "app:0", "meta": { "componentName": "TaskCard", "sourceId": "card", "filePath": "/app/TaskCard.tsx" } }
+  ],
+  "totalNodes": 2,
+  "truncated": false
+}
+```
+
+`parentId` refers to the nearest instrumented React ancestor, even for portals;
+it is not a DOM parent or necessarily the component that authored a JSX value.
+Transparent wrappers and fragments remain when their descendants have connected
+DOM output. Text output counts; a component returning `null` with no rendered
+descendants does not. The existing wrapper deduplication and instance IDs are
+preserved. Exact inspection accepts these IDs, including wrappers with no
+highlighter anchor of their own (`isRendered: true`, `isConnected: false`).
+
+Each request samples the committed React trees and current DOM connection state.
+At most 500 nodes are returned, with `totalNodes` and `truncated` describing the
+complete count and omitted tail. Parents precede children, so truncation never
+leaves a returned node pointing to an omitted parent. Props are excluded; use
+`inspect-component` for a chosen instance.
+
 Calls query currently connected browser peers with a two-second timeout per
 peer, in parallel. No cached registry is used. A missing/closed page or unmounted
 instance is an error. Instance IDs are only unique within a page. Page IDs change
@@ -66,6 +104,10 @@ returned the Button API via `docs-show`, and passed the linked story via
 the runtime tool deliberately reports a candidate, without claiming coverage.
 
 The useful addition is page/instance/selection identity plus current app props.
+The React tree additionally returned 26 rendered instances with actual ancestry;
+opening the modal added seven instances under `Modal → TaskForm`, and closing it
+returned to 26 with existing IDs preserved. These relationships come from the
+running app, which Storybook's source/story catalog cannot establish.
 Source-to-story lookup itself already exists in Storybook MCP; this MVP reuses
 the devtool's index to annotate live usage, rather than establishing a second
 authoritative component documentation or import-graph service. Missing-story
@@ -108,7 +150,12 @@ project config uses the documented
 
 - DOM-connected does not mean viewport-visible; offscreen components can appear.
 - Only instrumented client components are included. No React Server Components,
-  hook state, context values, parent tree, network history, or unvisited routes.
+  hook state, context values, network history, or unvisited routes. The React
+  component tree skips uninstrumented ancestors; Vue/Nuxt have no tree yet.
+- React hierarchy depends on the existing private Fiber integration. React 18/19
+  are exercised, but future React internals may require adaptation. The tree is
+  capped at 500 nodes; sampling still traverses the committed roots, so the cap
+  bounds response size rather than traversal cost.
 - Props use the existing lossy serializer; complex values can become markers.
   They reflect the latest serialized render, not a transactionally frozen app.
   Each page is sampled independently.
@@ -134,6 +181,31 @@ project config uses the documented
 
 ## Validation
 
+The React tree extension has five traversal unit tests covering fragments,
+portals, transparent ancestors, text/null output, multiple roots, connection
+changes and bounded output. Protocol tests cover tree responses, unsupported
+runtimes and inspecting rendered wrappers without a DOM anchor. Shared browser
+tests verify real React ancestry, offscreen membership, repeated instances,
+stable IDs and modal mount/unmount on all four React hosts, plus explicit
+unsupported responses on Vue/Nuxt. Portal/fragment edge cases are unit fixtures,
+not additional browser fixtures.
+
+React tree validation (2026-09-17):
+
+| Command | Result |
+| --- | --- |
+| `pnpm build` | Passed |
+| `pnpm test --run` | 413 passed, 33 files |
+| `pnpm typecheck` | Passed |
+| `E2E_PORT_OFFSET=3000 E2E_STORYBOOK_PORT=6036 pnpm exec playwright test --grep 'Runtime MCP' --workers=1 --reporter=line` | 18 passed |
+| `E2E_PORT_OFFSET=3000 E2E_STORYBOOK_PORT=6036 pnpm exec playwright test --workers=1 --reporter=line` | 191 passed |
+
+New tests failed before implementation (missing traversal module / unknown MCP
+tool) and passed afterward. Interactive verification on the React demo confirmed
+26 → 33 → 26 tree nodes when opening and closing the modal, with retained IDs
+unchanged. The Storybook integration results below belong to the committed MVP;
+the tree extension does not change Storybook indexing, generation or launching.
+
 `src/agent.test.ts` uses the real Devframe MCP protocol adapter with fixture
 snapshots: schemas, annotations, no mutations/resources, page selection, missing
 instances, story matching, provenance and peer timeouts.
@@ -149,7 +221,7 @@ move the serial suite's Storybook server too. Keep the chosen port free.
 
 ### Validation observations
 
-Final commands and results (2026-09-17):
+Initial MVP commands and results (2026-09-17, commit `33e185a`):
 
 | Command | Result |
 | --- | --- |

@@ -25,6 +25,8 @@ export interface SerializedRegistryInstance {
   }
   serializedProps?: SerializedProps
   isConnected: boolean
+  /** React subtree has connected DOM, including components with no own anchor. */
+  isRendered?: boolean
   /**
    * Top-level prop keys whose current value differs from their original
    * (pre-edit) value — i.e. props the user has live-edited. Lets the panel
@@ -32,6 +34,21 @@ export interface SerializedRegistryInstance {
    * frameworks without live prop editing.
    */
   editedProps?: string[]
+}
+
+/** Compact parent-first forest; parentId is the nearest instrumented ancestor. */
+export interface ComponentTreeNode {
+  id: string
+  parentId: string | null
+  meta: SerializedRegistryInstance['meta']
+}
+
+export interface RenderedComponentTree {
+  framework: 'react'
+  rootIds: string[]
+  nodes: ComponentTreeNode[]
+  totalNodes: number
+  truncated: boolean
 }
 
 /** Incremental diff for syncing registry changes from client to server */
