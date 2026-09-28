@@ -1037,6 +1037,55 @@ html, body, #app {
 .hl-stories-body::-webkit-scrollbar { width: 4px; }
 .hl-stories-body::-webkit-scrollbar-thumb { background: var(--sb-bordercolor-default); border-radius: 2px; }
 
+/* Stories / Docs tabs */
+.hl-stories-tabs {
+  display: flex;
+  gap: 4px;
+}
+
+.hl-stories-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 10px;
+  background: transparent;
+  color: var(--sb-fgcolor-muted);
+  border: 1px solid var(--sb-bordercolor-default);
+  border-radius: var(--sb-border-radius);
+  font-family: var(--sb-font-sans);
+  font-size: var(--sb-font-size-s2);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.hl-stories-tab:hover {
+  background: var(--sb-bgcolor-hover);
+  color: var(--sb-bar-hover);
+}
+
+.hl-stories-tab[aria-selected="true"] {
+  background: var(--sb-bgcolor-hover);
+  border-color: var(--sb-color-secondary);
+  color: var(--sb-bar-selected);
+}
+
+/* Docs tab body — the iframe fills the remaining pane height and scrolls
+   its own document; this container never scrolls itself. */
+.hl-docs-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.hl-docs-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: var(--sb-bgcolor-default);
+}
+
 /* Storybook status (not running / no stories) */
 .hl-sb-status {
   display: flex;

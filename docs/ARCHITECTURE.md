@@ -135,6 +135,29 @@ captures user actions as play-function steps for "Create with Interactions".
 navigation uses the Storybook channel API
 (`__STORYBOOK_ADDONS_CHANNEL__.emit('setCurrentStory')`).
 
+The Component Highlighter tab's detail pane has a Stories section
+(`buildHighlighterPanel`, `hl-stories-section`) listing the selected
+component's stories as live preview iframes. When Storybook's index also has
+a docs entry for the component, the section header renders a `role="tablist"`
+Stories/Docs tab pair (`buildStoriesHeader`) instead of a plain title; a
+component with no docs entry keeps the plain header, with no Docs tab in the
+DOM. Selecting the Docs tab lazily creates one iframe
+(`<storybookUrl>/iframe.html?viewMode=docs&id=<docsEntryId>`) and toggles it
+against the stories list — the iframe is created once and hidden/shown on
+later switches, never recreated. `findDocsEntry`
+(`src/utils/story-matching.ts`) decides which entry belongs to the component:
+an `autodocs`-tagged entry (Storybook synthesises it from the stories file,
+so it shares that file's `importPath`/`title`) or an `attached-mdx` entry
+(an `.mdx` file using `<Meta of={ComponentStories} />`, matched through its
+`storiesImports`); `unattached-mdx` entries never match. When both exist,
+the attached MDX entry wins. This runs against the full `storybook-index`
+RPC payload (`src/rpc/functions/storybook-index.ts`, a raw proxy of
+Storybook's own `/index.json`, docs entries included) — unlike
+`src/story-index.ts`'s server-side generator, which coverage and
+`check-story` read and which only ever produces/consumes `type: 'story'`
+entries, so docs entries never reach coverage's `hasStory` decision, the
+story-creation/append path, or "visit story" navigation.
+
 ### 6. Story generation (server)
 
 `src/frameworks/<fw>/story-generator.ts` receives a payload over RPC,
@@ -432,7 +455,7 @@ their hub, so this plugin's installation is the only one there.
 | `src/client/utils/prop-utils.ts` | Prop classification, editability, badge utilities |
 | `src/client/utils/prop-editor.ts` | Shared inline prop editor form builder |
 | `src/panel/panel.ts` | DevTools panel tabs |
-| `src/utils/story-matching.ts` | Story-to-component matching against Storybook's `index.json`, and visit-target selection |
+| `src/utils/story-matching.ts` | Story-to-component matching against Storybook's `index.json`, visit-target selection, and docs-entry matching (`findDocsEntry`) |
 | `src/utils/instance-selection.ts` | Props fingerprinting and picking one live instance per variant for story creation, preferring an instance with live edits || `src/utils/story-generator.ts` | Shared story generation utilities (naming, args formatting) |
 | `src/utils/csf-writer.ts` | CSF-AST append/dedupe/import-merge for existing story files, with a regex-splice fallback, plus prettier formatting |
 | `src/utils/normalize-runtime-imports.ts` | Normalizes runtime import specifiers across hosts |

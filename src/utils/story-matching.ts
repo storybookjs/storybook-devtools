@@ -18,6 +18,9 @@ export interface StoryIndexEntryLike {
   componentPath?: string
   exportName?: string
   type?: string
+  tags?: string[]
+  /** Docs entries only: story files this docs page must pre-load (`attached-mdx`). */
+  storiesImports?: string[]
 }
 
 /**
@@ -123,4 +126,63 @@ export function pickStoryId(
   }
 
   return candidates[0]!.id
+}
+
+/**
+ * Find the docs entry belonging to a component, given the component's own
+ * story candidates (from `findStoryCandidates`).
+ *
+ * A docs entry (`type: 'docs'`) belongs to the component in one of two ways:
+ * - **autodocs** (`tags` includes `autodocs`): Storybook synthesises it
+ *   from the stories file itself, so it carries that file's own
+ *   `importPath` and `title` — matched against the component's story
+ *   entries' `importPath`/`title`;
+ * - **attached MDX** (`tags` includes `attached-mdx`): a standalone `.mdx`
+ *   file using `<Meta of={XStories} />`, whose `storiesImports` names the
+ *   stories file(s) it documents.
+ *
+ * `unattached-mdx` docs (no `<Meta of={...}>` pointing at a component's
+ * stories) never match — they don't carry `storiesImports` entries that
+ * resolve to this component, and lack the `autodocs` tag.
+ *
+ * When both exist for the same component, the attached MDX entry wins — it
+ * is what Storybook's own sidebar renders as the component's docs page.
+ */
+export function findDocsEntry(
+  entries: Record<string, StoryIndexEntryLike>,
+  storyCandidates: StoryIndexEntryLike[],
+): StoryIndexEntryLike | null {
+  if (storyCandidates.length === 0) return null
+
+  const storyImportPaths = new Set(
+    storyCandidates.map((e) => e.importPath).filter((p): p is string => !!p),
+  )
+  const storyTitles = new Set(
+    storyCandidates.map((e) => e.title).filter((t): t is string => !!t),
+  )
+
+  let autodocsMatch: StoryIndexEntryLike | null = null
+  for (const entry of Object.values(entries)) {
+    if (entry.type !== 'docs') continue
+    const tags = entry.tags || []
+
+    if (tags.includes('attached-mdx')) {
+      const storiesImports = entry.storiesImports || []
+      if (storiesImports.some((p) => storyImportPaths.has(p))) {
+        return entry
+      }
+      continue
+    }
+
+    if (!autodocsMatch && tags.includes('autodocs')) {
+      const importMatches =
+        !!entry.importPath && storyImportPaths.has(entry.importPath)
+      const titleMatches = !!entry.title && storyTitles.has(entry.title)
+      if (importMatches || titleMatches) {
+        autodocsMatch = entry
+      }
+    }
+  }
+
+  return autodocsMatch
 }

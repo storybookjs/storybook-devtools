@@ -96,13 +96,19 @@ const buttons = shadow?.querySelectorAll('button');
 const iframe = shadow?.querySelector('iframe');
 const iframeDoc = iframe?.contentDocument;
 
-// Interact with panel tab buttons
-iframeDoc?.querySelectorAll('.tab-btn');  // click by textContent
+// Interact with panel rail buttons (top-level tabs)
+iframeDoc?.querySelectorAll('.rail-btn');  // click by .title, e.g. 'Component Highlighter', 'Coverage'
 
 // Panel-specific elements
 iframeDoc?.getElementById('highlight-toggle');  // highlight mode toggle
-iframeDoc?.querySelectorAll('tr.row');           // coverage table rows
-iframeDoc?.querySelector('.act-btn.locate');      // scroll-to-component buttons
+iframeDoc?.querySelectorAll('.cov-item');        // coverage list rows
+iframeDoc?.querySelector('.act-btn[title="Locate component"]');  // scroll-to-component button
+
+// Component Highlighter detail pane: Stories/Docs tabs (only present when
+// the component has a Storybook docs entry — see docs/ARCHITECTURE.md)
+iframeDoc?.querySelector('#hl-stories-tab-stories');  // Stories tab
+iframeDoc?.querySelector('#hl-stories-tab-docs');     // Docs tab
+iframeDoc?.querySelector('#hl-stories-panel-docs iframe.hl-docs-iframe');  // embedded docs page
 ```
 
 ### Authorization
@@ -135,6 +141,14 @@ ctx.rpc.requestTrustWithToken(token);
 - Create story / Create all: stories created without errors
 - Live prop editing (React AND Vue): the pencil on a prop row edits the live app; reset restores the original
 - Registry sync: `(await ctx.rpc.sharedState.get('component-highlighter:registry')).value()` returns the synced instances
+- Stories/Docs tab: a component with a Storybook docs entry (autodocs or
+  attached MDX) shows a Stories/Docs `role="tablist"` in the Stories section
+  header; a component with stories but no docs entry shows the plain
+  "Stories" title with no Docs tab in the DOM. Selecting Docs lazily loads
+  one `iframe.html?viewMode=docs&id=...` iframe and keeps it alive when
+  switching back to Stories and forth again; selecting a different component
+  resets the pane back to the Stories tab (`src/utils/story-matching.ts`'s
+  `findDocsEntry`, `src/panel/panel.ts`'s `buildStoriesHeader`)
 
 ### Communication architecture
 

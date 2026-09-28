@@ -7,7 +7,7 @@ import type { StorybookConfig } from 'storybook-react-rsbuild'
 // expose the framework's transitive copy — without it the preview boots
 // without renderToCanvas and every story errors.
 const config: StorybookConfig = {
-  stories: ['../src/**/*.stories.@(js|jsx|mjs|ts|tsx)'],
+  stories: ['../src/**/*.mdx', '../src/**/*.stories.@(js|jsx|mjs|ts|tsx)'],
   addons: ['@storybook/addon-docs'],
   framework: {
     name: 'storybook-react-rsbuild',

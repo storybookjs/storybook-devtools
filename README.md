@@ -283,6 +283,19 @@ The story file is created at `<component-dir>/<ComponentName>.stories.{ts,tsx}` 
 
 Generated files are formatted with your project's prettier when you have one installed.
 
+### Stories and Docs
+
+The component inspector's **Stories** section lists every story matching the
+selected component as a live embedded preview. When Storybook's index has a
+docs page for that component — an `autodocs`-tagged stories file, or an
+MDX file attached to it via `<Meta of={ComponentStories} />` — the section
+header becomes a **Stories** / **Docs** tab pair; selecting **Docs** embeds
+the component's full docs page (an `iframe.html?viewMode=docs&id=...` iframe)
+in place of the story previews. A component with no docs page keeps the
+plain "Stories" header. When both an autodocs page and an attached MDX page
+exist for the same component, the attached MDX page is shown — that's what
+Storybook's own sidebar renders as the component's docs.
+
 ### Coverage Dashboard
 
 The **Coverage** tab shows a progress bar, a table of all detected

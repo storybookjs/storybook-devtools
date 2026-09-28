@@ -12,6 +12,7 @@ import { storyNameFromExport } from 'storybook/internal/csf/csf-utils'
 import { propEditability } from '../client/utils/prop-utils'
 import { createPropEditor } from '../client/utils/prop-editor'
 import {
+  findDocsEntry,
   findStoryCandidates,
   pickStoryId,
   stripExtForMatch,
@@ -300,6 +301,9 @@ interface StorybookIndexEntry {
   name: string
   importPath: string
   type: string
+  tags?: string[]
+  /** Docs entries only: story files this docs page must pre-load (`attached-mdx`). */
+  storiesImports?: string[]
 }
 
 let storybookIndexCache: Record<string, StorybookIndexEntry> | null = null
@@ -1409,9 +1413,7 @@ async function refreshStoriesAfterCreate(
   }
 
   const hdr = pane.querySelector('.hl-stories-section .hl-section-hdr')
-  if (hdr) {
-    hdr.innerHTML = `<span class="hl-section-title">Stories <span class="cov-section-count">${stories.length}</span></span>`
-  }
+  if (hdr) updateStoriesHeaderCount(hdr, stories.length)
 
   const expectedName = storyNameFromExport(requestedName)
   const target =
@@ -1452,6 +1454,115 @@ function scrollCardIntoView(card: HTMLElement, scroller: HTMLElement) {
   tick()
 }
 
+// ─── Stories/Docs tabs ──────────────────────────────────────────────
+
+const STORIES_TAB_ID = 'hl-stories-tab-stories'
+const DOCS_TAB_ID = 'hl-stories-tab-docs'
+const STORIES_PANEL_ID = 'hl-stories-panel-stories'
+const DOCS_PANEL_ID = 'hl-stories-panel-docs'
+
+/**
+ * Build the Stories section header: a plain "Stories <count>" title when
+ * the component has no docs entry, or a two-tab `role="tablist"` (Stories /
+ * Docs) when it does. `onSelect` toggles the section body visibility; it
+ * does not touch the header — this function owns the `aria-selected`/
+ * `tabindex` state of its own tabs.
+ */
+function buildStoriesHeader(
+  count: number,
+  docsEntry: StorybookIndexEntry | null,
+  onSelect: (tab: 'stories' | 'docs') => void,
+): HTMLElement {
+  const hdr = document.createElement('div')
+  hdr.className = 'hl-section-hdr'
+
+  if (!docsEntry) {
+    const title = document.createElement('span')
+    title.className = 'hl-section-title'
+    title.append('Stories')
+    if (count > 0) {
+      const countEl = document.createElement('span')
+      countEl.className = 'cov-section-count'
+      countEl.textContent = String(count)
+      title.append(' ', countEl)
+    }
+    hdr.appendChild(title)
+    return hdr
+  }
+
+  const tabs = document.createElement('div')
+  tabs.className = 'hl-stories-tabs'
+  tabs.setAttribute('role', 'tablist')
+  tabs.setAttribute('aria-label', 'Stories and Docs')
+
+  const makeTab = (id: string, panelId: string, selected: boolean) => {
+    const tab = document.createElement('button')
+    tab.type = 'button'
+    tab.id = id
+    tab.className = 'hl-stories-tab'
+    tab.setAttribute('role', 'tab')
+    tab.setAttribute('aria-selected', String(selected))
+    tab.setAttribute('aria-controls', panelId)
+    tab.tabIndex = selected ? 0 : -1
+    return tab
+  }
+
+  const storiesTab = makeTab(STORIES_TAB_ID, STORIES_PANEL_ID, true)
+  storiesTab.append('Stories')
+  if (count > 0) {
+    const countEl = document.createElement('span')
+    countEl.className = 'cov-section-count'
+    countEl.textContent = String(count)
+    storiesTab.append(' ', countEl)
+  }
+
+  const docsTab = makeTab(DOCS_TAB_ID, DOCS_PANEL_ID, false)
+  docsTab.append('Docs')
+
+  const select = (tab: 'stories' | 'docs') => {
+    const isStories = tab === 'stories'
+    storiesTab.setAttribute('aria-selected', String(isStories))
+    storiesTab.tabIndex = isStories ? 0 : -1
+    docsTab.setAttribute('aria-selected', String(!isStories))
+    docsTab.tabIndex = isStories ? -1 : 0
+    onSelect(tab)
+  }
+
+  storiesTab.addEventListener('click', () => select('stories'))
+  docsTab.addEventListener('click', () => select('docs'))
+  const arrowNav = (e: KeyboardEvent) => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+    e.preventDefault()
+    const next = e.currentTarget === storiesTab ? docsTab : storiesTab
+    next.focus()
+    select(next === storiesTab ? 'stories' : 'docs')
+  }
+  storiesTab.addEventListener('keydown', arrowNav)
+  docsTab.addEventListener('keydown', arrowNav)
+
+  tabs.appendChild(storiesTab)
+  tabs.appendChild(docsTab)
+  hdr.appendChild(tabs)
+  return hdr
+}
+
+/**
+ * Update the Stories header's count in place, without touching the tablist
+ * (when a Docs tab is present) — a full `innerHTML` rewrite here would
+ * discard the tabs and desync whichever one is currently selected.
+ */
+function updateStoriesHeaderCount(hdr: Element, count: number) {
+  const label = hdr.querySelector(`#${STORIES_TAB_ID}`) ?? hdr.querySelector('.hl-section-title')
+  if (!label) return
+  let countEl = label.querySelector('.cov-section-count')
+  if (!countEl) {
+    countEl = document.createElement('span')
+    countEl.className = 'cov-section-count'
+    label.append(' ', countEl)
+  }
+  countEl.textContent = String(count)
+}
+
 /** Find stories matching a component by file path or title */
 async function findMatchingStories(relativeFilePath: string, componentName?: string): Promise<StorybookIndexEntry[]> {
   const entries = await getStorybookIndex()
@@ -1463,6 +1574,27 @@ async function findMatchingStories(relativeFilePath: string, componentName?: str
     relativeFilePath,
     componentName || baseName,
   ) as StorybookIndexEntry[]
+}
+
+/**
+ * Find the component's docs entry (autodocs or attached MDX), if Storybook's
+ * index has one. `null` when the component has no stories, or has stories
+ * but no docs page — the Stories section then renders without a Docs tab.
+ */
+async function findMatchingDocsEntry(
+  relativeFilePath: string,
+  componentName?: string,
+): Promise<StorybookIndexEntry | null> {
+  const entries = await getStorybookIndex()
+  if (!entries || Object.keys(entries).length === 0) return null
+  const baseName =
+    stripExtForMatch(relativeFilePath).split('/').pop() || relativeFilePath
+  const candidates = findStoryCandidates(
+    entries,
+    relativeFilePath,
+    componentName || baseName,
+  )
+  return findDocsEntry(entries, candidates) as StorybookIndexEntry | null
 }
 
 /** Build the highlighter panel — empty state or component detail */
@@ -1487,6 +1619,7 @@ async function buildHighlighterPanel() {
   // Look up stories first so we can conditionally show story-related actions
   const matchingStories = await findMatchingStories(relPath, comp.meta.componentName)
   const hasStories = matchingStories.length > 0
+  const docsEntry = await findMatchingDocsEntry(relPath, comp.meta.componentName)
 
   // Also look up the coverage entry to find storyPath
   let storyPath: string | null = null
@@ -1835,13 +1968,38 @@ async function buildHighlighterPanel() {
   const storiesSection = document.createElement('div')
   storiesSection.className = 'hl-section hl-stories-section'
 
-  const storiesHdr = document.createElement('div')
-  storiesHdr.className = 'hl-section-hdr'
-  storiesHdr.innerHTML = `<span class="hl-section-title">Stories${matchingStories.length > 0 ? ` <span class="cov-section-count">${matchingStories.length}</span>` : ''}</span>`
-  storiesSection.appendChild(storiesHdr)
-
   const storiesBody = document.createElement('div')
   storiesBody.className = 'hl-stories-body'
+  storiesBody.id = STORIES_PANEL_ID
+  storiesBody.setAttribute('role', 'tabpanel')
+  storiesBody.setAttribute('aria-labelledby', STORIES_TAB_ID)
+
+  const docsBody = docsEntry ? document.createElement('div') : null
+  if (docsBody) {
+    docsBody.className = 'hl-docs-body'
+    docsBody.id = DOCS_PANEL_ID
+    docsBody.setAttribute('role', 'tabpanel')
+    docsBody.setAttribute('aria-labelledby', DOCS_TAB_ID)
+    docsBody.hidden = true
+  }
+
+  const storiesHdr = buildStoriesHeader(matchingStories.length, docsEntry, (tab) => {
+    if (tab === 'docs' && docsBody && docsEntry) {
+      if (!docsBody.querySelector('iframe')) {
+        const iframe = document.createElement('iframe')
+        iframe.className = 'hl-docs-iframe'
+        iframe.src = `${getStorybookUrl()}/iframe.html?viewMode=docs&id=${encodeURIComponent(docsEntry.id)}`
+        iframe.title = `${comp.meta.componentName} docs`
+        docsBody.appendChild(iframe)
+      }
+      storiesBody.hidden = true
+      docsBody.hidden = false
+    } else {
+      storiesBody.hidden = false
+      if (docsBody) docsBody.hidden = true
+    }
+  })
+  storiesSection.appendChild(storiesHdr)
 
   const sbRunning = await checkStorybook()
 
@@ -1929,6 +2087,7 @@ async function buildHighlighterPanel() {
   }
 
   storiesSection.appendChild(storiesBody)
+  if (docsBody) storiesSection.appendChild(docsBody)
 
   // Rebuilding for the component already on screen: swap only the inspector
   // sections and keep the existing stories section's DOM — recreating (or
