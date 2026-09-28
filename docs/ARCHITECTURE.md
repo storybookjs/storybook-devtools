@@ -130,8 +130,11 @@ captures user actions as play-function steps for "Create with Interactions".
 ### 5. DevTools panel
 
 `src/panel/panel.ts` is served as the devframe's `clientAssets` SPA at
-`/__storybook-devtools/`. Four tabs: Storybook (embedded iframe), Coverage
-(dashboard, bulk "Create all"), Terminal (process output), Docs. Story
+`/__storybook-devtools/`. Four tabs: Storybook (embedded iframe), Component Highlighter, Coverage
+(dashboard, bulk "Generate all"), and About (documentation and GitHub links).
+The rail uses a monochrome Storybook icon; the About page retains the full logo.
+The highlighter header labels its editor action "Open component in editor";
+its menu only includes the separate story-editor action when available. Story
 navigation uses the Storybook channel API
 (`__STORYBOOK_ADDONS_CHANNEL__.emit('setCurrentStory')`).
 
@@ -158,7 +161,29 @@ Storybook's own `/index.json`, docs entries included) — unlike
 entries, so docs entries never reach coverage's `hasStory` decision, the
 story-creation/append path, or "visit story" navigation.
 
+`src/client/notification-styles.ts` adapts the existing hub toasts inside the
+embedded/standalone dock shadow root to Storybook’s inverse notification
+surface, typography, spacing and dismiss button. The hub still owns message
+history, dismissal, timing and actions. This adapter targets hub-ui 1.x
+`.z-dock-toast` / `.bg-toast-glass` markup; the shared panel browser suite
+checks real light/dark toasts to detect upstream changes. Rsbuild and Next
+explicitly mount `@devframes/plugin-messages` to expose the message-feed
+RPCs consumed by the hub toast overlay; Vite mounts it automatically.
+
+Interactive overlay colors reflect story existence: blue without stories,
+pink with stories, dashed for siblings. The name pill aligns with the
+component’s left edge, with the Storybook badge outside it where space
+permits; near the viewport edge the badge stays inside the row.
+
 ### 6. Story generation (server)
+
+The `create-stories` RPC handles bulk requests from Coverage and the command
+palette. It calls `create-story` sequentially with `skipNavigation` and
+`suppressNotification`, then emits one summary including failed writes.
+`create-story` returns `{ success: boolean }`; disabled writes and missing
+serialized props count as failures, not successful creations. Single saves
+retain their individual notifications. File invalidation and story-created
+broadcasts still happen for each write.
 
 `src/frameworks/<fw>/story-generator.ts` receives a payload over RPC,
 generates framework-specific story source (React `.stories.tsx`, Vue
@@ -376,6 +401,7 @@ function, one file per function under `src/rpc/functions/`, collected by
 | `reset-prop` | action | Panel resets a prop to its original value |
 | `select-component` | action | Client/overlay selects a component in the panel |
 | `visit-story` | action | Tell the panel to navigate to a story |
+| `create-stories` | `story-created` (per write) | Bulk creation with one summary notification |
 | `notify` | action | Show a toast notification via DevTools logs |
 | `highlight-target` | action | Debug-log the current highlight target |
 | `toggle-overlay` | action | Debug-log an overlay toggle |
@@ -507,6 +533,7 @@ function, the server broadcasts, a client-registered handler acts on the DOM.
 | `reset-prop` | `do-reset-prop` | Panel resets a prop via `__componentHighlighterResetProp` |
 | `select-component` | `do-select-component` | Client/overlay selects a component in the panel |
 | `visit-story` | `do-visit-story` | Tell the panel to navigate to a story |
+| `create-stories` | `story-created` (per write) | Bulk creation with one summary notification |
 | `notify` | — (server-side only) | Show a toast notification |
 | — (create-story handler) | `story-created` | Server broadcasts the story creation result; client relays it to `visit-story` when Storybook is running |
 | — (command handler) | `do-open-url` | Open a URL in a new tab (e.g. Storybook docs) |
@@ -665,6 +692,11 @@ activation; real consuming apps don't, so their listeners module loads late
 `e2e/common-listeners-replay-suite.ts` covers the recovery path: it clears
 the client registry, re-dispatches `component-highlighter:listeners-ready`,
 and asserts the runtime replays the full registry with working highlighting.
+
+## Design follow-ups
+
+Open coverage-list and highlighter-tab design decisions are tracked in
+[DESIGN_FOLLOW_UPS.md](./DESIGN_FOLLOW_UPS.md).
 
 ## Known caveats
 

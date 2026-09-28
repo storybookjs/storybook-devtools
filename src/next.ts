@@ -18,6 +18,7 @@ import { createRequire } from 'module'
 import { normalizeHubBase } from '@devframes/hub/constants'
 import type { DevframeHubContext } from '@devframes/hub'
 import { nextDevframeHub } from '@devframes/next/hub'
+import createMessagesDevframe from '@devframes/plugin-messages'
 import { createTerminalsDevframe } from '@devframes/plugin-terminals'
 import {
   createComponentHighlighterUnplugin,
@@ -733,7 +734,7 @@ export function createStorybookDevtoolsRoute(
       // The Terminals dock is a separate devframe; `@vitejs/devtools` mounts
       // it on the Vite host, so the Next hub mounts it too for the same
       // "Open Terminal" → Storybook session experience.
-      devframes: [createStorybookDevframe(deps), createTerminalsDevframe()],
+      devframes: [createStorybookDevframe(deps), createTerminalsDevframe(), createMessagesDevframe()],
       configure: (ctx: DevframeHubContext) => {
         const { diagnostics } = registerStorybookHubSurfaces(ctx, {
           deps,

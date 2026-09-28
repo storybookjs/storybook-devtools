@@ -92,7 +92,7 @@ const shadow = dock?.shadowRoot;
 const buttons = shadow?.querySelectorAll('button');
 // Click by title: btn.title === 'Storybook' or 'Component Highlighter'
 
-// Access the panel iframe (Storybook/Coverage/Terminal/Docs tabs)
+// Access the panel iframe (Storybook/Component Highlighter/Coverage/About tabs)
 const iframe = shadow?.querySelector('iframe');
 const iframeDoc = iframe?.contentDocument;
 
@@ -138,7 +138,13 @@ ctx.rpc.requestTrustWithToken(token);
 - Hover on coverage rows: highlight overlays appear on app page (`[data-coverage-highlight]`)
 - Highlight toggle: `window.__componentHighlighterIsActive()` reflects state, cursor changes
 - Scroll-to-component: locate button triggers scroll via RPC
-- Create story / Create all: stories created without errors
+- Create story / Generate all: stories created without errors; bulk creation
+  emits one summary notification, including the failure count
+- Notifications: compact Storybook styling in light and dark mode, with
+  working dismissal; Next/Rsbuild must mount the Messages plugin
+- About: documentation link is here, not in the rail
+- Hover outlines: blue without stories, pink with stories, dashed for siblings;
+  the name aligns with the component and the badge stays within the viewport
 - Live prop editing (React AND Vue): the pencil on a prop row edits the live app; reset restores the original
 - Registry sync: `(await ctx.rpc.sharedState.get('component-highlighter:registry')).value()` returns the synced instances
 - Stories/Docs tab: a component with a Storybook docs entry (autodocs or

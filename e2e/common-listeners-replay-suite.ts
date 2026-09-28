@@ -94,24 +94,9 @@ export function registerListenersReplaySuite(test: TestLike) {
       await enableHighlighting(page)
       await hoverTaskListHeading(page)
 
-      const hasHoveredHighlight = await page.evaluate(() => {
-        const els = Array.from(
-          document.querySelectorAll(
-            '#component-highlighter-container div[data-highlight-id]',
-          ),
-        ) as HTMLElement[]
-
-        return els.some((el) => {
-          const style = window.getComputedStyle(el)
-          // Highlights use outline (not border) for strokes
-          return (
-            style.outlineColor.includes('255, 71, 133') ||
-            style.backgroundColor.includes('255, 71, 133')
-          )
-        })
-      })
-
-      expect(hasHoveredHighlight).toBe(true)
+      const label = page.locator('.ch-highlight-label').first()
+      await expect(label).toBeVisible()
+      await expect(label.locator('..')).toHaveCSS('outline-color', 'rgb(0, 109, 235)')
     })
   })
 }

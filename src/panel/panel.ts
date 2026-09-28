@@ -43,6 +43,8 @@ async function initRpcClient() {
       }
       if (config.storybookDocsUrl) {
         storybookDocsUrl = config.storybookDocsUrl
+        const docsLink = document.getElementById('about-docs-link') as HTMLAnchorElement | null
+        if (docsLink) docsLink.href = storybookDocsUrl
       }
       // The Storybook tab renders once before this config arrives — its
       // status banner may show the default URL and a stale "not running";
@@ -194,7 +196,8 @@ interface RegistryInstance {
 const CODE_ICON = `<svg width="12" height="12" viewBox="0 0 14 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M7.53613 4.31055C7.63877 4.05443 7.92931 3.92987 8.18555 4.03223C8.44167 4.13483 8.56617 4.4254 8.46387 4.68164L6.46387 9.68164C6.36117 9.93761 6.07062 10.0623 5.81445 9.95996C5.55837 9.85739 5.43397 9.56674 5.53613 9.31055L7.53613 4.31055Z" fill="currentColor"/><path d="M3.64648 5.14258C3.84175 4.94762 4.15834 4.94747 4.35352 5.14258C4.5486 5.33775 4.54846 5.65435 4.35352 5.84961L3.20703 6.99609L4.35352 8.14258C4.5486 8.33775 4.54846 8.65435 4.35352 8.84961C4.15826 9.04458 3.84166 9.0447 3.64648 8.84961L2.14648 7.34961C2.04896 7.25205 2.00006 7.12393 2 6.99609C2.00001 6.93207 2.01266 6.86784 2.03711 6.80762C2.04931 6.77763 2.06475 6.74834 2.08301 6.7207L2.14648 6.64258L3.64648 5.14258Z" fill="currentColor"/><path d="M9.64648 5.14258C9.84174 4.94763 10.1583 4.9475 10.3535 5.14258L11.8535 6.64258L11.918 6.7207C11.9363 6.7484 11.9517 6.77755 11.9639 6.80762C11.9883 6.86782 12 6.93209 12 6.99609C11.9999 7.12383 11.9509 7.25208 11.8535 7.34961L10.3535 8.84961C10.1583 9.04455 9.84166 9.0447 9.64648 8.84961C9.45144 8.65443 9.45155 8.33782 9.64648 8.14258L10.793 6.99609L9.64648 5.84961C9.45142 5.65445 9.45158 5.33784 9.64648 5.14258Z" fill="currentColor"/><path fill-rule="evenodd" clip-rule="evenodd" d="M13.5 0C13.7761 0 14 0.223858 14 0.5V11.5L13.9902 11.6006C13.9503 11.7961 13.7961 11.9503 13.6006 11.9902L13.5 12H0.5L0.399414 11.9902C0.203918 11.9503 0.0496648 11.7961 0.00976562 11.6006L0 11.5V0.5C1.28852e-07 0.223858 0.223858 1.20798e-08 0.5 0H13.5ZM1 11H13V3H1V11ZM1.5 1C1.22386 1 1 1.22386 1 1.5C1 1.77614 1.22386 2 1.5 2C1.77614 2 2 1.77614 2 1.5C2 1.22386 1.77614 1 1.5 1ZM3.5 1C3.22386 1 3 1.22386 3 1.5C3 1.77614 3.22386 2 3.5 2C3.77614 2 4 1.77614 4 1.5C4 1.22386 3.77614 1 3.5 1ZM5.5 1C5.22386 1 5 1.22386 5 1.5C5 1.77614 5.22386 2 5.5 2C5.77614 2 6 1.77614 6 1.5C6 1.22386 5.77614 1 5.5 1Z" fill="currentColor"/></svg>`
 const PENCIL_ICON = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`
 const RESET_ICON = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>`
-// SB_LOGO_FULL — dual-color Storybook logo for the rail (pink bg + white S)
+// Full-color logo is reserved for the About page.
+const SB_TAB_ICON = `<svg width="16" height="16" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="m16.71.243l-.12 2.71a.18.18 0 0 0 .29.15l1.06-.8l.9.7a.18.18 0 0 0 .28-.14l-.1-2.76l1.33-.1a1.2 1.2 0 0 1 1.279 1.2v21.596a1.2 1.2 0 0 1-1.26 1.2l-16.096-.72a1.2 1.2 0 0 1-1.15-1.16l-.75-19.797a1.2 1.2 0 0 1 1.13-1.27L16.7.222zM13.64 9.3c0 .47 3.16.24 3.59-.08c0-3.2-1.72-4.89-4.859-4.89c-3.15 0-4.899 1.72-4.899 4.29c0 4.45 5.999 4.53 5.999 6.959c0 .7-.32 1.1-1.05 1.1c-.96 0-1.35-.49-1.3-2.16c0-.36-3.649-.48-3.769 0c-.27 4.03 2.23 5.2 5.099 5.2c2.79 0 4.969-1.49 4.969-4.18c0-4.77-6.099-4.64-6.099-6.999c0-.97.72-1.1 1.13-1.1c.45 0 1.25.07 1.19 1.87z"/></svg>`
 const SB_LOGO_FULL = `<svg width="20" height="20" viewBox="-31.5 0 319 319" xmlns="http://www.w3.org/2000/svg"><path fill="#FF4785" d="M9.87,293.32L0.01,30.57C-0.31,21.9,6.34,14.54,15.01,14L238.49,0.03C247.32,-0.52,254.91,6.18,255.47,15.01C255.49,15.34,255.5,15.67,255.5,16V302.32C255.5,311.16,248.33,318.32,239.49,318.32C239.25,318.32,239.01,318.32,238.77,318.31L25.15,308.71C16.83,308.34,10.18,301.65,9.87,293.32Z"/><path fill="#FFF" d="M188.67,39.13L190.19,2.41L220.88,0L222.21,37.86C222.25,39.18,221.22,40.29,219.9,40.33C219.34,40.35,218.79,40.17,218.34,39.82L206.51,30.5L192.49,41.13C191.44,41.93,189.95,41.72,189.15,40.67C188.81,40.23,188.64,39.68,188.67,39.13ZM149.41,119.98C149.41,126.21,191.36,123.22,196.99,118.85C196.99,76.45,174.23,54.17,132.57,54.17C90.91,54.17,67.57,76.79,67.57,110.74C67.57,169.85,147.35,170.98,147.35,203.23C147.35,212.28,142.91,217.65,133.16,217.65C120.46,217.65,115.43,211.17,116.02,189.1C116.02,184.32,67.57,182.82,66.09,189.1C62.33,242.57,95.64,257.99,133.75,257.99C170.69,257.99,199.65,238.3,199.65,202.66C199.65,139.3,118.68,141,118.68,109.6C118.68,96.88,128.14,95.18,133.75,95.18C139.66,95.18,150.3,96.22,149.41,119.98Z"/></svg>`
 const COVERAGE_TAB_ICON = `<svg width="16" height="16" viewBox="0 0 10 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M9.76464 1.0757C9.90598 1.16404 10 1.32104 10 1.5V7.5L9.99992 7.50892C9.9987 7.57865 9.98321 7.64491 9.95623 7.70488C9.92676 7.77041 9.88358 7.82845 9.83035 7.87534L5.3369 11.8695C5.30013 11.9031 5.25937 11.9303 5.21616 11.951C5.14779 11.9838 5.0738 12 5 12C4.9262 12 4.85221 11.9838 4.78384 11.951C4.74062 11.9303 4.69986 11.9031 4.66308 11.8695L0.169665 7.87535L0.161201 7.86772C0.109893 7.82048 0.0706711 7.76488 0.0437672 7.70488C0.0169921 7.64535 0.0015266 7.57963 0.000107183 7.51046L0 7.5V1.5C0 1.32103 0.0940346 1.16401 0.235393 1.07568L0.252579 1.06477C0.268532 1.0548 0.290464 1.04142 0.318377 1.02514C0.374201 0.992577 0.453956 0.94838 0.557643 0.896536C0.765036 0.79284 1.06813 0.658576 1.46689 0.525658C2.2651 0.259589 3.44341 0 5 0C6.55659 0 7.7349 0.259589 8.53311 0.525658C8.93187 0.658576 9.23496 0.79284 9.44236 0.896536C9.54604 0.94838 9.6258 0.992577 9.68162 1.02514C9.70954 1.04142 9.73147 1.0548 9.74742 1.06477L9.76464 1.0757ZM1 1.7934V7.27547L2.06804 8.22483L8.65573 1.63719C8.53022 1.58541 8.38394 1.53003 8.21689 1.47434C7.5151 1.24041 6.44341 1 5 1C3.55659 1 2.4849 1.24041 1.78311 1.47434C1.43187 1.59142 1.17246 1.70716 1.00486 1.79096L1 1.7934ZM5 10.831L2.81674 8.89035L9 2.70713V7.27547L5 10.831Z" fill="currentColor"/></svg>`
 const CROSSHAIR_ICON = `<svg width="16" height="16" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 3.00391C0.447715 3.00391 0 3.45162 0 4.00391V9.00391C0 9.55619 0.447715 10.0039 1 10.0039H4.5C4.77614 10.0039 5 9.78005 5 9.50391C5 9.22776 4.77614 9.00391 4.5 9.00391H1V4.00391L13 4.00391V9.00391H12C11.7239 9.00391 11.5 9.22776 11.5 9.50391C11.5 9.78005 11.7239 10.0039 12 10.0039H13C13.5523 10.0039 14 9.55619 14 9.00391V4.00391C14 3.45162 13.5523 3.00391 13 3.00391H1Z" fill="currentColor"/><path d="M6.45041 7.00643C6.50971 7.00046 6.5704 7.00502 6.62952 7.0209C6.67575 7.03326 6.71935 7.05208 6.75929 7.07634L10.2265 9.09876C10.2664 9.12106 10.3035 9.149 10.3366 9.18222C10.3798 9.22561 10.414 9.27597 10.4384 9.33038C10.4682 9.39673 10.4824 9.46686 10.4822 9.53619C10.4821 9.60554 10.4676 9.67562 10.4374 9.74185C10.4128 9.79612 10.3784 9.84632 10.335 9.8895C10.3018 9.92257 10.2646 9.95035 10.2245 9.97248L9.1496 10.5931L9.8996 11.8921C10.1067 12.2508 9.9838 12.7095 9.62508 12.9166C9.26636 13.1238 8.80767 13.0008 8.60056 12.6421L7.85056 11.3431L6.77563 11.9637C6.73646 11.9873 6.69378 12.0057 6.64855 12.0179C6.58942 12.0339 6.52873 12.0386 6.46941 12.0327C6.39698 12.0258 6.32904 12.0033 6.26895 11.9687C6.2088 11.9342 6.15518 11.8869 6.11265 11.8278C6.07771 11.7795 6.05119 11.7247 6.03524 11.6656C6.02298 11.6204 6.01735 11.5743 6.018 11.5285L6.00012 7.51465C5.99908 7.46793 6.00458 7.42076 6.017 7.37454C6.03285 7.31525 6.05933 7.26029 6.09428 7.21183C6.13666 7.15281 6.1901 7.10543 6.25004 7.0709C6.31004 7.03618 6.37794 7.01357 6.45041 7.00643Z" fill="currentColor"/></svg>`
@@ -1144,17 +1147,20 @@ async function buildCoveragePanel(coverage: CoverageData) {
       createAllBtn.addEventListener('click', async () => {
         createAllBtn.disabled = true
         createAllBtn.textContent = 'Creating\u2026'
-        for (const { instance, index, total } of uncoveredSelections) {
-          try {
-            await rpcCall('component-highlighter:create-story', {
-              meta: instance.meta,
-              serializedProps: instance.serializedProps,
-              skipNavigation: true,
-              ...(total > 1 ? { sourceInstance: { index, total } } : {}),
-            })
-          } catch {
-            // Best effort
-          }
+        try {
+          await rpcCall('component-highlighter:create-stories', uncoveredSelections.map(({ instance, index, total }) => ({
+            meta: instance.meta,
+            serializedProps: instance.serializedProps,
+            ...(total > 1 ? { sourceInstance: { index, total } } : {}),
+          })))
+        } catch {
+          await rpcCall('component-highlighter:notify', {
+            message: 'Could not generate stories. Check the connection and try again.',
+            level: 'error',
+          }).catch(() => {})
+        } finally {
+          createAllBtn.disabled = false
+          createAllBtn.textContent = 'Generate all'
         }
         setTimeout(() => {
           lastCoverageJson = ''
@@ -1663,7 +1669,8 @@ async function buildHighlighterPanel() {
   const editorBtn = document.createElement('button')
   editorBtn.className = 'act-btn'
   editorBtn.innerHTML = CODE_ICON
-  editorBtn.title = 'Open in editor'
+  editorBtn.title = 'Open component in editor'
+  editorBtn.setAttribute('aria-label', editorBtn.title)
   editorBtn.addEventListener('click', () => openInEditor(comp.meta.filePath))
   hdrActions.appendChild(editorBtn)
 
@@ -2139,12 +2146,6 @@ function showHighlighterPopover(
   popover.dataset['entry'] = `hl-${comp.meta.componentName}`
   const relPath = comp.meta.relativeFilePath || comp.meta.filePath
 
-  popover.appendChild(
-    makePopoverItem(CODE_ICON, 'Open component in editor', () =>
-      openInEditor(comp.meta.filePath),
-    ),
-  )
-
   if (hasStories && storyPath) {
     popover.appendChild(
       makePopoverItem(CODE_ICON, 'Open story in editor', () =>
@@ -2195,11 +2196,11 @@ function init() {
   const rail = document.createElement('div')
   rail.className = 'rail'
 
-  // Storybook tab — full-color logo
+  // Storybook tab — monochrome icon, matching the other rail actions
   const sbBtn = document.createElement('button')
-  sbBtn.className = 'rail-btn rail-sb-btn active'
+  sbBtn.className = 'rail-btn active'
   sbBtn.setAttribute('data-tab', 'storybook')
-  sbBtn.innerHTML = SB_LOGO_FULL
+  sbBtn.innerHTML = SB_TAB_ICON
   sbBtn.title = 'Storybook'
   sbBtn.addEventListener('click', () => switchTab('storybook'))
 
@@ -2220,15 +2221,6 @@ function init() {
   covBtn.title = 'Coverage'
   covBtn.addEventListener('click', () => switchTab('coverage'))
 
-  // Docs button — opens docs in new tab (no panel pane)
-  const docsBtn = document.createElement('button')
-  docsBtn.className = 'rail-btn'
-  docsBtn.innerHTML = DOCS_TAB_ICON
-  docsBtn.title = 'Open Storybook docs'
-  docsBtn.addEventListener('click', () => {
-    window.open(storybookDocsUrl, '_blank')
-  })
-
   // Spacer pushes help to bottom
   const spacer = document.createElement('div')
   spacer.className = 'rail-spacer'
@@ -2244,7 +2236,6 @@ function init() {
   rail.appendChild(sbBtn)
   rail.appendChild(highlightBtn)
   rail.appendChild(covBtn)
-  rail.appendChild(docsBtn)
   rail.appendChild(spacer)
   rail.appendChild(helpBtn)
   app.appendChild(rail)
@@ -2271,6 +2262,9 @@ function init() {
       <div class="about-logo">${SB_LOGO_FULL.replace('width="20" height="20"', 'width="48" height="48"')}</div>
       <div class="about-name">Storybook DevTools</div>
       <div class="about-version">@storybook/experimental-devtools</div>
+      <a id="about-docs-link" class="about-link" href="${esc(storybookDocsUrl)}" target="_blank" rel="noopener noreferrer">
+        ${DOCS_TAB_ICON} Documentation
+      </a>
       <a class="about-link" href="https://github.com/storybookjs/vite-plugin-experimental-storybook-devtools" target="_blank" rel="noopener noreferrer">
         ${CODE_ICON} View on GitHub
       </a>

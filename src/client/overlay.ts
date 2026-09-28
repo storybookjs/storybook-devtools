@@ -66,15 +66,10 @@ const OVERLAY_Z_INDEX = {
   menu: 2147483647,
 } as const
 
+// Host-page overlays cannot consume shadow-root tokens.
 const COLORS = {
-  other: { stroke: '#006DEB', bg: 'rgba(0, 109, 235, 0.05)' },
-  hovered: { stroke: '#FF4785', bg: 'rgba(255, 71, 133, 0.05)' },
-  sameType: {
-    stroke: '#FF4785',
-    bg: 'rgba(255, 71, 133, 0.05)',
-    dashed: true,
-  },
-  selected: { stroke: '#FF4785', bg: 'rgba(255, 71, 133, 0.2)' },
+  uncovered: { stroke: '#006DEB', bg: 'rgba(0, 109, 235, 0.05)', selectedBg: 'rgba(0, 109, 235, 0.2)' }, // --sb-color-secondary
+  covered: { stroke: '#FF4785', bg: 'rgba(255, 71, 133, 0.05)', selectedBg: 'rgba(255, 71, 133, 0.2)' }, // --sb-color-brand
 }
 
 // ─── DOM-level state (managed by overlay, not the machine) ──────────
@@ -278,12 +273,12 @@ function updateHighlightElement(
   el: HTMLDivElement,
   instance: ComponentInstance,
   type: 'hovered' | 'sameType' | 'other' | 'selected',
-  _hasStory?: boolean,
+  hasStory = false,
 ) {
   if (!instance.rect) return
 
   const rect = instance.rect
-  const colorConfig = COLORS[type]
+  const colorConfig = hasStory ? COLORS.covered : COLORS.uncovered
 
   const stackOrder =
     instance.element?.isConnected &&
@@ -296,10 +291,10 @@ function updateHighlightElement(
   el.style.top = `${rect.top}px`
   el.style.width = `${rect.width}px`
   el.style.height = `${rect.height}px`
-  el.style.backgroundColor = colorConfig.bg
+  el.style.backgroundColor = type === 'selected' ? colorConfig.selectedBg : colorConfig.bg
 
   el.style.border = 'none'
-  if ('dashed' in colorConfig && colorConfig.dashed) {
+  if (type === 'sameType') {
     el.style.outline = `1px dashed ${colorConfig.stroke}`
   } else {
     el.style.outline = `1px solid ${colorConfig.stroke}`
@@ -312,7 +307,7 @@ function updateHighlightElement(
       rect,
       instance.meta.componentName,
       colorConfig.stroke,
-      !!_hasStory,
+      hasStory,
     )
   } else {
     removeHighlightLabel(el)

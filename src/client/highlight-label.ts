@@ -7,7 +7,8 @@
  *
  * Design: a small Storybook logo badge (separate square) followed by a
  * white-background / black-text name pill, both sitting 2 px above the
- * highlight outline at the top-left corner.
+ * highlight outline. The name aligns with the component’s left edge; the
+ * badge sits outside it unless that would clip at the viewport edge.
  *
  * Placement priority:
  *   1. Above the box (top-left, offset upward)
@@ -91,17 +92,22 @@ export function attachHighlightLabel(
     placement = 'inside'
   }
 
+  // Align the name pill with the component, leaving the badge to its left.
+  // At the viewport edge keep the entire row inside, badge first.
+  const badgeOffset = showBadge ? LABEL_H + GAP : 0
+  const left = rect.left >= badgeOffset ? -badgeOffset : Math.max(0, -rect.left)
+
   // Position the wrapper
   let posCSS: string
   switch (placement) {
     case 'above':
-      posCSS = `top: -${LABEL_H + GAP}px; bottom: auto; left: -2px;`
+      posCSS = `top: -${LABEL_H + GAP}px; bottom: auto; left: ${left}px;`
       break
     case 'below':
-      posCSS = `top: auto; bottom: -${LABEL_H + GAP}px; left: -2px;`
+      posCSS = `top: auto; bottom: -${LABEL_H + GAP}px; left: ${left}px;`
       break
     case 'inside':
-      posCSS = `top: 4px; bottom: auto; left: 4px;`
+      posCSS = `top: 4px; bottom: auto; left: ${left}px;`
       break
   }
 

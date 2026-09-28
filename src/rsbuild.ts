@@ -37,6 +37,7 @@ import {
 } from './context'
 import { createStoryIndexService } from './story-index'
 import { resolveDualStackSidecarPort } from './sidecar-port'
+import createMessagesDevframe from '@devframes/plugin-messages'
 import { createTerminalsDevframe } from '@devframes/plugin-terminals'
 
 export interface StorybookDevtoolsRsbuildOptions
@@ -261,7 +262,7 @@ export function storybookDevtoolsRsbuild(
           base: DEVFRAMES_HUB_BASE,
           // Same Terminals dock `@vitejs/devtools` mounts on the Vite host, so
           // "Open Terminal" reaches the Storybook session here as well.
-          devframes: [definition, createTerminalsDevframe()],
+          devframes: [definition, createTerminalsDevframe(), createMessagesDevframe()],
           // The Terminals devframe exposes an agent-callable tool, which
           // would otherwise make the hub warn (DF0078) about the missing
           // optional `@devframes/agentic` peer; out of scope for the

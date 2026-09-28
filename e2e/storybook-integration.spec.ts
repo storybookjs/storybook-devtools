@@ -65,11 +65,19 @@ test('panel launch, real story writes and preview', async ({ page }, testInfo) =
         "  await expect(canvas.getByRole('button')).toBeVisible();",
         "  canvasElement.setAttribute('data-peer-review-play', 'passed');", '}'],
     })
+    const batch = await rpc(page, 'component-highlighter:create-stories', [
+      { ...data, storyName: 'Batch one' },
+      { ...data, storyName: 'Batch two' },
+    ])
+    expect(batch).toEqual({ created: 2, failed: 0 })
+    const toasts = page.locator('devframes-dock-embedded .z-dock-toast > div')
+    await expect(toasts.filter({ hasText: 'Created 2 stories' })).toHaveCount(1)
+    await expect(toasts.filter({ hasText: /BatchOne|BatchTwo/ })).toHaveCount(0)
     const source = fs.readFileSync(story, 'utf8')
     const csf = loadCsf(source, {
       fileName: story, makeTitle: title => title || 'Review',
     }).parse()
-    expect(Object.keys(csf._storyExports)).toEqual(['Plain', 'Recorded'])
+    expect(Object.keys(csf._storyExports)).toEqual(['Plain', 'Recorded', 'BatchOne', 'BatchTwo'])
     const framework = host === 'next' ? '@storybook/nextjs'
       : host === 'rsbuild' ? 'storybook-react-rsbuild'
       : vue ? '@storybook/vue3-vite' : '@storybook/react-vite'

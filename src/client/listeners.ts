@@ -28,6 +28,7 @@ import {
 } from './coverage-actions'
 import { isCurrentlyRecording } from './interaction-recorder'
 import { warn } from './logger'
+import { installNotificationStyles } from './notification-styles'
 import {
   createHighlightActor,
   getHighlightActor,
@@ -737,6 +738,7 @@ function initialize() {
     actor.getSnapshot().context.mode === 'panel'
 
   // Start auto-initialization of RPC
+  installNotificationStyles()
   autoInitRpc()
 }
 

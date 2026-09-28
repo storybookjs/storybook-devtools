@@ -243,7 +243,7 @@ npm run dev
 Open Vite DevTools (floating button, usually bottom-right) and activate the **Component Highlighter** dock entry.
 
 Once the dock is active:
-- **Hover** over any component to see its highlight and tooltip
+- **Hover** over any component to see its highlight and tooltip. Components with stories use pink outlines; components without stories use blue. Other instances of the same component use dashed outlines.
 - **Click** on a component to open the context menu
 - **Press Alt/Option** to toggle click-through mode (interact with the app underneath highlights)
 - **Create stories** with a single click
@@ -300,11 +300,13 @@ Storybook's own sidebar renders as the component's docs.
 
 The **Coverage** tab shows a progress bar, a table of all detected
 components with their story status, and visibility indicators for what's
-currently rendered. **Create all** generates stories for every visible
+currently rendered. **Generate all** generates stories for every visible uncovered
 component instance, deduplicating by props fingerprint; per-component
 buttons create one story at a time. When several instances share a
 fingerprint, the one with live prop edits is used, and the creation toast
-names which instance the story came from.
+names which instance the story came from. Bulk generation shows one summary
+notification with the number of stories created and any failures. Notifications
+use Storybook’s compact inverse colors in light and dark mode.
 
 Whether a component "has a story" is decided from a real Storybook story
 index built from your `stories` globs — the same matching Storybook itself
@@ -319,8 +321,13 @@ files, and coverage matches against that.
 |-----|-------------|
 | **Storybook** | Embedded Storybook iframe with start/status controls |
 | **Coverage** | Component story coverage dashboard with bulk creation |
-| **Terminal** | Live Storybook process output with error highlighting |
-| **Docs** | Embedded Storybook documentation |
+| **Component Highlighter** | Selected component properties, stories, and component docs |
+| **About** | Package information, Storybook documentation, and GitHub links |
+
+The rail uses the monochrome Storybook icon. The highlighter’s **Open component
+in editor** action opens the component source; **Open story in editor** is a
+separate menu action when a story is available. Terminal output remains
+available through the host’s Terminals dock.
 
 ## Configuration
 

@@ -142,18 +142,6 @@ html, body, #app {
   flex-shrink: 0;
 }
 
-/* Full-color SB logo in the rail (not monochrome) */
-.rail-btn.rail-sb-btn {
-  width: 32px;
-  height: 32px;
-  padding: 4px;
-}
-
-.rail-btn.rail-sb-btn svg {
-  width: 20px;
-  height: 20px;
-}
-
 /* Spacer to push help to the bottom */
 .rail-spacer {
   flex: 1;
