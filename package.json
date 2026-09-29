@@ -77,7 +77,7 @@
     "@rsbuild/core": ">=1.1.7",
     "@vitejs/devtools": ">=0.7.6",
     "next": ">=15.0.0",
-    "storybook": ">=10.6.0",
+    "storybook": ">=10.6.0 || ^11.0.0-0",
     "react": ">=18.0.0"
   },
   "peerDependenciesMeta": {
@@ -102,7 +102,7 @@
     "bumpp": "^10.3.2",
     "pkg-pr-new": "^0.0.75",
     "playwright": "^1.57.0",
-    "storybook": "10.6.0",
+    "storybook": "11.0.0-alpha.1",
     "tsdown": "^0.18.1",
     "typescript": "^5.9.3",
     "vite": "^8.3.1",

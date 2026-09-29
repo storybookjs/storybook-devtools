@@ -25,7 +25,7 @@ function splitCommand(full: string): { command: string; args: string[] } {
 
 const NPX_FALLBACK = (port: string): { command: string; args: string[] } => ({
   command: 'npx',
-  args: ['storybook', 'dev', '-p', port, '--no-open'],
+  args: ['storybook', 'dev', '-p', port],
 })
 
 /**
@@ -50,13 +50,7 @@ export async function resolveStorybookDevCommand({
       /* webpackIgnore: true */ 'storybook/internal/common'
     )
     const packageManager = JsPackageManagerFactory.getPackageManager({}, cwd)
-    const full = packageManager.getPackageCommand([
-      'storybook',
-      'dev',
-      '-p',
-      port,
-      '--no-open',
-    ])
+    const full = packageManager.getPackageCommand(['storybook', 'dev', '-p', port])
     return splitCommand(full)
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
@@ -76,6 +70,13 @@ export async function resolveStorybookDevCommand({
  * come up at `storybookUrl`. Pinned rather than deleted because the PTY host
  * layers the caller's env over its own copy of `process.env`, so only an
  * explicit value can displace the inherited one.
+ *
+ * `BROWSER=none` stops `storybook dev` from opening a tab. Storybook's
+ * browser launcher honours it in every major (10.x and 11 open by default,
+ * later 11 builds only with `--open`), whereas the `--no-open` flag is
+ * rejected as an unknown option by builds that made opening opt-in. Neither
+ * flag is passed, and `--ci` is avoided because it also disables the
+ * interactive prompts the PTY session relies on.
  */
 export function buildStorybookEnv(
   base: NodeJS.ProcessEnv,
@@ -87,5 +88,6 @@ export function buildStorybookEnv(
   }
   env['STORYBOOK'] = 'true'
   env['PORT'] = port
+  env['BROWSER'] = 'none'
   return env
 }

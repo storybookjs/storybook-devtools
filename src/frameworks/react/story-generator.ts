@@ -7,6 +7,7 @@ import * as path from 'path'
 import {
   type StoryGenerationData,
   type GeneratedStory,
+  type StoryFormat,
   toValidStoryName,
   generateStoryName,
   getRelativeImportPath,
@@ -15,7 +16,10 @@ import {
   collectRequiredImports,
   generateArgsContent,
   formatPlayFunctionForStory,
-  printImportStatement,
+  renderStoryFileHeader,
+  renderStoryExport,
+  wrapStoryObject,
+  newFileExportStyle,
 } from '../../utils/story-generator'
 import { writeStoryIntoCsf, type CsfImportRequest } from '../../utils/csf-writer'
 
@@ -34,6 +38,7 @@ export async function generateStory(
     playFunction,
     playImports,
     storybookFramework,
+    storyFormat = { kind: 'csf3' },
   } = data
   const { componentName, filePath, isDefaultExport } = meta
 
@@ -83,8 +88,7 @@ export async function generateStory(
     imports,
     ...(playImports ? { playImports } : {}),
   })
-  const storyExportSource = renderStoryExport({
-    storyName,
+  const storyObjectSource = renderStoryObject({
     props,
     ...(componentRegistry ? { componentRegistry } : {}),
     ...(playFunction ? { playFunction } : {}),
@@ -96,7 +100,9 @@ export async function generateStory(
         componentName,
         props,
         requiredImports,
-        storyExportSource,
+        storyName,
+        storyObjectSource,
+        format: storyFormat,
         ...(storybookFramework ? { storybookFramework } : {}),
       }),
       filePath: storyFilePath,
@@ -108,7 +114,7 @@ export async function generateStory(
   const written = await writeStoryIntoCsf({
     existingCode: existingContent,
     fileName: storyFilePath,
-    storyExportSource,
+    storyObjectSource,
     desiredExportName: storyName,
     requiredImports,
   })
@@ -124,14 +130,13 @@ export async function generateStory(
   }
 }
 
-/** Render the story export block, without touching the surrounding file */
-function renderStoryExport(options: {
-  storyName: string
+/** Render the story object literal, without the export around it */
+function renderStoryObject(options: {
   props: SerializedProps
   componentRegistry?: Map<string, string>
   playFunction?: string[]
 }): string {
-  const { storyName, props, playFunction } = options
+  const { props, playFunction } = options
   const argsContent = generateArgsContent(props, 1, options.componentRegistry)
   const hasArgs = Object.keys(props).length > 0
   const hasPlay = playFunction && playFunction.length > 0
@@ -139,9 +144,9 @@ function renderStoryExport(options: {
     ? `\n${formatPlayFunctionForStory(playFunction)}`
     : ''
 
-  return `export const ${storyName}: Story = {${hasArgs ? `\n  args: ${argsContent},` : ''}${playContent}
-};
-`
+  return wrapStoryObject(
+    `${hasArgs ? `\n  args: ${argsContent},` : ''}${playContent}`,
+  )
 }
 
 /** Generate new story file content: header, imports, then the story export */
@@ -149,31 +154,28 @@ function generateStoryContent(options: {
   componentName: string
   props: SerializedProps
   requiredImports: CsfImportRequest[]
-  storyExportSource: string
+  storyName: string
+  storyObjectSource: string
+  format: StoryFormat
   storybookFramework?: string
 }): string {
   const {
     componentName,
     props,
     requiredImports,
-    storyExportSource,
+    storyName,
+    storyObjectSource,
+    format,
     storybookFramework = '@storybook/react-vite',
   } = options
 
-  const importStatements = [
-    ...(hasAnyJSXProps(props) ? [`import React from 'react';`] : []),
-    `import type { Meta, StoryObj } from '${storybookFramework}';`,
-    ...requiredImports.map(printImportStatement),
-  ].join('\n')
-
-  return `${importStatements}
-
-const meta: Meta<typeof ${componentName}> = {
-  component: ${componentName},
-};
-
-export default meta;
-type Story = StoryObj<typeof ${componentName}>;
-
-${storyExportSource}`
+  return (
+    renderStoryFileHeader({
+      componentName,
+      format,
+      storybookFramework,
+      requiredImports,
+      ...(hasAnyJSXProps(props) ? { leadingImports: [`import React from 'react';`] } : {}),
+    }) + renderStoryExport(newFileExportStyle(format), storyName, storyObjectSource)
+  )
 }

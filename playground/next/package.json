@@ -18,14 +18,14 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.57.0",
-    "@storybook/addon-a11y": "10.6.0",
-    "@storybook/addon-docs": "10.6.0",
-    "@storybook/nextjs": "10.6.0",
+    "@storybook/addon-a11y": "11.0.0-alpha.1",
+    "@storybook/addon-docs": "11.0.0-alpha.1",
+    "@storybook/nextjs": "11.0.0-alpha.1",
     "@types/node": "^25.0.3",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "playwright": "^1.57.0",
-    "storybook": "10.6.0",
+    "storybook": "11.0.0-alpha.1",
     "typescript": "^5.9.3"
   }
 }

@@ -45,6 +45,27 @@ describe('computeCoverage', () => {
     expect(coverage.coveragePercent).toBe(0)
   })
 
+  it('does not treat a component test entry as a story', () => {
+    const projectRoot = '/repo'
+    const entries: Record<string, StoryIndexEntryLike> = {
+      'components-lonely--clicks': {
+        id: 'components-lonely--clicks',
+        type: 'story',
+        subtype: 'test',
+        importPath: './src/components/Lonely.stories.tsx',
+        componentPath: './src/components/Lonely.tsx',
+      },
+    }
+
+    const coverage = computeCoverage(
+      new Map([['Lonely', path.join(projectRoot, 'src/components/Lonely.tsx')]]),
+      projectRoot,
+      entries,
+    )
+
+    expect(coverage.entries[0]?.hasStory).toBe(false)
+  })
+
   it('sorts uncovered components first, then alphabetically', () => {
     const projectRoot = '/repo'
     const entries: Record<string, StoryIndexEntryLike> = {

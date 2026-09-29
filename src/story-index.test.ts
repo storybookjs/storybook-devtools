@@ -45,6 +45,51 @@ describe('createStoryIndexService', () => {
     expect(Object.keys((await service.getIndex()).entries)).toContain('custom-button--first')
   })
 
+  it('skips an empty or whitespace-only story file instead of failing the index', async () => {
+    const cwd = configuredProject()
+    fs.writeFileSync(path.join(cwd, 'src/Empty.stories.tsx'), '')
+    fs.writeFileSync(path.join(cwd, 'src/Blank.stories.tsx'), '  \n\n\t\n')
+    const service = createStoryIndexService({ cwd, logDebug: () => {} })
+
+    const { entries } = await service.getIndex()
+
+    expect(Object.keys(entries)).toContain('custom-button--first')
+    expect(Object.keys(entries).some((id) => id.includes('empty'))).toBe(false)
+    expect(Object.values(entries).some((e) => e.importPath?.includes('Blank'))).toBe(false)
+  })
+
+  it('indexes CSF factory story files and matches them to their component', async () => {
+    const cwd = configuredProject()
+    fs.writeFileSync(path.join(cwd, 'src/Card.tsx'), 'export const Card = () => null')
+    fs.writeFileSync(path.join(cwd, 'src/Card.stories.tsx'), `import preview from '../.storybook/preview'
+import { Card } from './Card'
+
+const meta = preview.meta({ component: Card, title: 'Custom/Card' })
+
+export const Plain = meta.story({})
+export const WithBody = meta.story({ args: { body: 'x' } })
+`)
+    const service = createStoryIndexService({ cwd, logDebug: () => {} })
+
+    const { entries } = await service.getIndex()
+
+    expect(Object.keys(entries)).toEqual(
+      expect.arrayContaining(['custom-card--plain', 'custom-card--with-body']),
+    )
+    expect(entries['custom-card--with-body']).toMatchObject({
+      name: 'With Body',
+      exportName: 'WithBody',
+    })
+    const { findStoryCandidates, pickStoryId } = await import('./utils/story-matching')
+    expect(findStoryCandidates(entries, 'src/Card.tsx').map((e) => e.id)).toEqual([
+      'custom-card--plain',
+      'custom-card--with-body',
+    ])
+    expect(pickStoryId(entries, 'src/Card.tsx', 'WithBody', { requirePreferred: true })).toBe(
+      'custom-card--with-body',
+    )
+  })
+
   it('rebuilds against changed config globs after full invalidation', async () => {
     const cwd = configuredProject()
     const service = createStoryIndexService({ cwd, logDebug: () => {} })

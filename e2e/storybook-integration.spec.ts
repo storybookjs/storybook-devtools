@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
-import { loadCsf } from 'storybook/internal/csf-tools'
+import { expectPreviewFormat, expectStoryFileFormat, expectedStoryFormat } from './story-format-helpers'
 
 const storybookUrl = process.env.STORYBOOK_E2E_URL || 'http://localhost:6006'
 
@@ -82,14 +82,17 @@ test('panel launch, real story writes and preview', async ({ page }, testInfo) =
     await expect(toasts.filter({ hasText: 'Created 2 stories' })).toHaveCount(1)
     await expect(toasts.filter({ hasText: /BatchOne|BatchTwo/ })).toHaveCount(0)
     const source = fs.readFileSync(story, 'utf8')
-    const csf = loadCsf(source, {
-      fileName: story, makeTitle: title => title || 'Review',
-    }).parse()
-    expect(Object.keys(csf._storyExports)).toEqual(['Plain', 'Recorded', 'BatchOne', 'BatchTwo'])
-    const framework = host === 'next' ? '@storybook/nextjs'
-      : host === 'rsbuild' ? 'storybook-react-rsbuild'
-      : vue ? '@storybook/vue3-vite' : '@storybook/react-vite'
-    expect(source).toContain(`from '${framework}'`)
+    const format = expectedStoryFormat(host)
+    expectPreviewFormat(cwd, format)
+    expectStoryFileFormat(source, story, format, ['Plain', 'Recorded', 'BatchOne', 'BatchTwo'])
+    if (format === 'factory') {
+      expect(source).toContain("import preview from '../../.storybook/preview';")
+    } else {
+      const framework = host === 'next' ? '@storybook/nextjs'
+        : host === 'rsbuild' ? 'storybook-react-rsbuild'
+        : vue ? '@storybook/vue3-vite' : '@storybook/react-vite'
+      expect(source).toContain(`from '${framework}'`)
+    }
     expect(await rpc(page, 'component-highlighter:check-story', { componentPath })).toMatchObject({ hasStory: true })
 
     // Include a real docs entry to exercise the inspector's lazy Docs pane.
@@ -112,10 +115,13 @@ test('panel launch, real story writes and preview', async ({ page }, testInfo) =
     expect(indexResponse.ok()).toBe(true)
     const index = await indexResponse.json()
     const entries = Object.values(index.entries) as Array<{
-      id: string; importPath: string; name: string
+      id: string; type: string; importPath: string; name: string
     }>
-    const recorded = entries.find(entry =>
-      entry.importPath.includes('Button.stories') && entry.name === 'Recorded')
+    const buttonStories = entries.filter(entry =>
+      entry.type === 'story' && entry.importPath.includes('Button.stories'))
+    expect(buttonStories.map(entry => entry.name).sort()).toEqual(
+      ['Batch One', 'Batch Two', 'Plain', 'Recorded'])
+    const recorded = buttonStories.find(entry => entry.name === 'Recorded')
     expect(recorded).toBeTruthy()
     const preview = await page.context().newPage()
     await preview.goto(`${storybookUrl}/iframe.html?id=${recorded!.id}&viewMode=story`)

@@ -30,13 +30,38 @@ export function parseVersionFloor(range: string | undefined): string | undefined
   return match?.[1]
 }
 
-/** `a` and `b` as `x.y.z`; negative when `a < b`, zero when equal. */
+/**
+ * Orders two semver versions (`x.y.z` with an optional `-prerelease`);
+ * negative when `a < b`, zero when equal. A prerelease sorts before its
+ * release; prerelease identifiers compare numerically when both are numbers.
+ * Build metadata is ignored.
+ */
 export function compareVersions(a: string, b: string): number {
-  const pa = a.split('.').map((n) => parseInt(n, 10) || 0)
-  const pb = b.split('.').map((n) => parseInt(n, 10) || 0)
+  const split = (v: string) => {
+    const [core = '', ...rest] = v.split('+')[0]!.split('-')
+    return {
+      nums: core.split('.').map((n) => parseInt(n, 10) || 0),
+      pre: rest.length ? rest.join('-').split('.') : [],
+    }
+  }
+  const pa = split(a)
+  const pb = split(b)
   for (let i = 0; i < 3; i++) {
-    const diff = (pa[i] ?? 0) - (pb[i] ?? 0)
+    const diff = (pa.nums[i] ?? 0) - (pb.nums[i] ?? 0)
     if (diff !== 0) return diff
+  }
+  if (!pa.pre.length || !pb.pre.length) return pb.pre.length - pa.pre.length
+  for (let i = 0; i < Math.max(pa.pre.length, pb.pre.length); i++) {
+    const x = pa.pre[i]
+    const y = pb.pre[i]
+    if (x === undefined) return -1
+    if (y === undefined) return 1
+    if (x === y) continue
+    const nx = /^\d+$/.test(x)
+    const ny = /^\d+$/.test(y)
+    if (nx && ny) return Number(x) - Number(y)
+    if (nx !== ny) return nx ? -1 : 1
+    return x < y ? -1 : 1
   }
   return 0
 }

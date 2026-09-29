@@ -82,7 +82,7 @@ export default { component: Button } as Meta<typeof Button>;
 
 export const Old = () => <Button label="old" />;
 
-export const Primary: Story = {
+export const Primary = {
   args: {
     label: "New",
     variant: "primary",
@@ -100,7 +100,7 @@ export const Default = {
   args: { label: 'Hello' },
 };
 
-export const Default2: Story = {
+export const Default2 = {
   args: {
     label: "Second",
   },

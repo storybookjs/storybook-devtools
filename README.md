@@ -4,17 +4,11 @@ Dev-server devtools for visual component highlighting and automatic Storybook st
 
 ## Features
 
-- **Component Highlighting** - Visual overlay on React, Vue, and Nuxt SSR components
-- **One-Click Story Generation** - Create Storybook stories directly from your running app
-- **Interaction Recording** - Record user interactions and generate stories with play functions
-- **Props Serialization** - Serializes JSX children, Vue slots, nested components, and reactive objects
-- **Append to Existing Stories** - Add new story variants to existing story files
-- **Smart Imports** - Automatically resolves and adds component imports
-- **DevTools Integration** - Dock panel with Storybook, Component Highlighter, Coverage, and About tabs
-- **Coverage Dashboard** - Track story coverage across all detected components using the Storybook index, refreshed after story-file edits on every host
-- **Copy Prompt** - Copy LLM-friendly component context to clipboard for AI-assisted development
-- **Development Only** - Instrumentation is disabled in production builds unless explicitly forced
-- **Keyboard Shortcuts** - Quick toggles and navigation
+- Highlight components and inspect or edit their live props.
+- Create stories from current props, including JSX children and Vue slots.
+- Record interactions and generate Storybook play functions.
+- Preview stories and docs in the DevTools panel.
+- Find components without stories and generate stories in bulk.
 
 ## Installation
 
@@ -28,7 +22,7 @@ yarn add @storybook/experimental-devtools
 
 ### Peer Dependencies
 
-- `storybook` >= 10.6.0
+- `storybook` 10.6 or newer.
 - One bundler host: `vite` >= 5.0.0 with `@vitejs/devtools` >= 0.7.6, `@rsbuild/core` >= 1.1.7, or `next` (App Router, webpack dev)
 - One of: `react` >= 18.0.0 or `vue` >= 3.0.0
 
@@ -73,17 +67,15 @@ export default defineConfig({
 > On Vite >= 8.3, setting `devtools: { enabled: true }` in the Vite config
 > makes Vite mount `@vitejs/devtools` itself. Use either that option or the
 > `DevTools()` plugin, not both — registering both fails with `DTK0034`.
-> The verified Nuxt 4.5 setup also supports the native option.
 >
 > Storybook's own Vite builder loads this same config file when it runs, so
 > both the `DevTools()` plugin above and `devtools: { enabled: true }` need
-> gating (e.g. `process.env.STORYBOOK ? null : DevTools()`, or
-> `enabled: !process.env.STORYBOOK`) — otherwise Storybook mounts a second,
-> unrelated devframe hub.
+> disabling in that process (e.g. `process.env.STORYBOOK ? null : DevTools()`,
+> or `enabled: !process.env.STORYBOOK`) to avoid loading DevTools inside Storybook.
 
 ### Nuxt SSR
 
-The configuration below is verified with Nuxt 4.5.2.
+For Nuxt 4.5:
 
 ```typescript
 // nuxt.config.ts
@@ -133,30 +125,15 @@ to agree on a host (for example `127.0.0.1`). When running Storybook for Nuxt
 components, disable `vite.devtools.enabled` and omit the module, the component
 highlighter plugin, and the head scripts from the Storybook process.
 
-Older Nuxt builders (including 4.2.1) needed an explicit `DevTools()` plugin
-because they did not forward Vite's native option. Do not keep that explicit
-plugin when upgrading to the verified Nuxt 4.5 setup; it registers DevTools twice.
+Older Nuxt builders may require `DevTools()` instead of `vite.devtools.enabled`.
+Do not use both options together.
 
 ### Vite (unified entry)
 
-`./react` and `./vue` are thin wrappers over a single `./vite` entry that
-picks the framework via an option instead of the import path:
-
-```typescript
-// vite.config.ts
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import { DevTools } from '@vitejs/devtools'
-import { storybookDevtools } from '@storybook/experimental-devtools/vite'
-
-export default defineConfig({
-  plugins: [
-    react(),
-    DevTools(),
-    storybookDevtools({ framework: 'react' }),
-  ],
-})
-```
+Alternatively, import `storybookDevtools` from
+`@storybook/experimental-devtools/vite` and use
+`storybookDevtools({ framework: 'react' })` or
+`storybookDevtools({ framework: 'vue' })` in your Vite plugins.
 
 ### Rsbuild (rspack)
 
@@ -180,8 +157,8 @@ export default defineConfig({
 Options:
 
 - **`clientAuth`** *(default `true`)* — set `clientAuth: false` to skip the interactive auth gate for single-user localhost or E2E setups.
-- **`framework: 'vue'`** is accepted, but only `framework: 'react'` is playground/E2E-verified on Rsbuild today.
-- **`dedupeReact`** works the same as on Vite — see "React version support" below.
+- **`framework: 'vue'`** is accepted but not yet verified on Rsbuild.
+- **`dedupeReact`** works the same as on Vite — see [Configuration](#configuration).
 
 ### Next.js (webpack)
 
@@ -235,23 +212,14 @@ Options and caveats:
 - **`auth`** *(default `true`)* — `createStorybookDevtoolsRoute({ auth: false })` disables the interactive auth gate for single-user localhost or E2E setups.
 - **`host`** — pin the sidecar server's bind address (e.g. `host: '127.0.0.1'`) to match `next dev -H 127.0.0.1`; the default (`'localhost'`) can resolve to an address the browser's websocket can't reach.
 - **Turbopack is unsupported.** Running `next dev` under Turbopack prints a warning and the app runs normally, without instrumentation. Run `next dev` without `--turbopack` on Next 15, or pass `--webpack` explicitly on majors where Turbopack is the default (Next 16+).
-- **`rsc`** *(default `true`)* — only modules with a `"use client"` directive are instrumented; server components are never registered or highlighted. A module that is client-only transitively (imported by a `"use client"` module but carrying no directive of its own) is not instrumented either — only modules with their own directive are tagged.
+- **`rsc`** *(default `true`)* — only modules with their own `"use client"` directive are instrumented, including when imported by another client component. Server components are not highlighted.
 - **Story generation** imports from the framework package read out of your `.storybook/main` config (e.g. `@storybook/nextjs-vite`); falls back to `@storybook/nextjs` when no Storybook config is found.
 - **Manual hook fallback** — if entry injection isn't viable in your setup, `getNextDevToolsHookScript()` returns the same hook script for manual delivery, e.g. via `<Script strategy="beforeInteractive">` in the root layout.
 
-### Start developing
+### Open the highlighter
 
-```bash
-npm run dev
-```
-
-Open Vite DevTools (floating button, usually bottom-right) and activate the **Component Highlighter** dock entry.
-
-Once the dock is active:
-- **Hover** over any component to see its highlight and tooltip. Components with stories use pink outlines; components without stories use blue. Other instances of the same component use dashed outlines.
-- **Click** on a component to open the context menu
-- **Press Alt/Option** to toggle click-through mode (interact with the app underneath highlights)
-- **Create stories** with a single click
+Start your app with `npm run dev`, open the DevTools dock, and activate
+**Component Highlighter**. Complete the authorization prompt if shown.
 
 ## Usage
 
@@ -259,9 +227,9 @@ Once the dock is active:
 
 | Mode | Trigger | Description |
 |------|---------|-------------|
-| **Hover** | Mouse over | Highlights single component under cursor |
+| **Hover** | Mouse over | Highlights the component under the cursor |
 | **Click-through** | Press `Alt/Option` | Toggles click-through mode so you can interact with the app underneath highlights |
-| **Clear Selection** | `Escape` | Clears current component selection |
+| **Clear Selection** | `Escape` | Clears the current component selection |
 | **Exit Highlighting** | `Escape` x2 (within 600ms) | Turns off highlight mode entirely |
 
 ### Highlight Colors
@@ -278,246 +246,52 @@ Click a highlighted component to open its context menu:
 - **Open Code** / **Open Story** - open the source or story file in your editor (Open Story is omitted if no story exists yet)
 - **Copy Prompt** - copies an LLM-friendly prompt with component name, path, props, and story status
 - **View Story** - navigates to the story in the embedded Storybook panel
-- **Properties** - all current props with type-colored badges, expandable objects, copy buttons
+- **Properties** - all current props with type-colored badges, expandable objects, and copy buttons
 
 To create a story: enter a name (auto-suggested from meaningful props like
 variant, size, type), then click **Create** for a story with the current
-props, or **Create with Interactions** to record clicks/typing/selections
+props, or **Create with Interactions** to record clicks, typing, and selections
 first and generate a story with a play function.
 
-The story file is created at `<component-dir>/<ComponentName>.stories.{ts,tsx}` (`.ts` for Vue, `.tsx` for React). If the file already exists, a new named export is appended to it on the CSF syntax tree via Storybook's own `csf-tools`, so existing statements and comments are preserved when printing, the export name is deduplicated against everything the file already declares, and imports the new story needs are merged into matching existing import statements. A story file that Storybook cannot parse as CSF still gets the new export, appended as text.
+Use the inspector's **Stories** tab for previews and **Docs** for available
+component documentation.
 
-Generated files are formatted with your project's prettier when you have one installed; this final formatting step can also reformat existing statements.
+Stories are saved alongside the component as `<ComponentName>.stories.ts`
+for Vue or `<ComponentName>.stories.tsx` for React. New files use CSF3, or
+[CSF factories](https://storybook.js.org/docs/api/csf/csf-next) when your
+`.storybook/preview` uses `definePreview`. Existing files receive a new story
+in their current format. Your project's Prettier formats the file when
+installed, which may also reformat existing stories.
 
-### Stories and Docs
+### Find missing stories
 
-The component inspector has **Properties**, **Stories**, and (when available)
-**Docs** tabs. Properties opens first when selecting a different component
-instance. Stories contains the story-name field, **Create story** action,
-and live previews. Switching tabs preserves the draft name and loaded docs;
-refreshing props keeps the active tab for the same selection.
-Arrow keys, Home, and End move between tabs.
+The **Coverage** tab groups rendered components under **Needs stories** and
+**Has stories**. Search by name or path, inspect a component, or open its
+stories. **Highlight missing** highlights uncovered components;
+**Generate all** creates a story for each unique set of component props.
 
-Docs appears when Storybook's index contains an autodocs page or attached
-MDX for the component. It loads on first selection and stays mounted while
-hidden. If both exist, attached MDX takes precedence, matching Storybook's
-sidebar. Components without docs omit the Docs tab.
-
-### Coverage Dashboard
-
-The **Coverage** tab shows components currently rendered on the page, grouped
-under **Needs stories** and **Has stories**, with a coverage percentage.
-Search by component name or file path. Click a component name to inspect its
-properties. Each row has one labeled primary action: **Create story** for an
-uncovered component, or **View stories** to open the inspector's Stories tab.
-The always-visible menu holds secondary actions such as opening source files
-and locating the component. Separate status icons are omitted.
-
-**Highlight missing** highlights uncovered components on the page.
-**Generate all** generates stories for every visible uncovered component
-instance, deduplicating by props fingerprint. Per-component creation uses
-the same deduplication for that component. When instances share a fingerprint,
-the one with live prop edits is used. Bulk generation shows one summary
-notification with the number of stories created and any failures. Notifications
-use Storybook’s compact inverse colors in light and dark mode.
-
-Whether a component "has a story" is decided from a real Storybook story
-index built from your `stories` globs — the same matching Storybook itself
-uses, so it respects custom titles and stories living outside a component's
-own directory. If no Storybook project is found (or indexing fails), the
-index is instead synthesised from a scan for `<ComponentName>.stories.*`
-files, and coverage matches against that.
-
-### DevTools Panel Tabs
-
-| Tab | Description |
-|-----|-------------|
-| **Storybook** | Embedded Storybook iframe with start/status controls |
-| **Coverage** | Component story coverage dashboard with bulk creation |
-| **Component Highlighter** | Selected component properties, stories, and component docs |
-| **About** | Package information, Storybook documentation, and GitHub links |
-
-The rail uses the monochrome Storybook icon. The highlighter’s **Open component
-in editor** action opens the component source; **Open story in editor** is a
-separate menu action when a story is available. Terminal output remains
-available through the host’s Terminals dock.
+Coverage uses your Storybook index, including custom titles and stories outside
+the component's directory. If the index is unavailable, it looks for
+`<ComponentName>.stories.*` files.
 
 ## Configuration
 
-```typescript
-componentHighlighter({
-  // Glob patterns for files to instrument.
-  // Default differs per framework: '**/*.{tsx,jsx}' for React, '**/*.vue' for Vue/Nuxt.
-  include: ['**/*.{tsx,jsx}'],
+Pass options to `componentHighlighter()` (or your host's integration):
 
-  // Glob patterns to exclude
-  exclude: ['**/node_modules/**', '**/dist/**'],
+| Option | Default | Purpose |
+|--------|---------|---------|
+| `include` | React: `**/*.{tsx,jsx}`; Vue/Nuxt: `**/*.vue` | File patterns to instrument |
+| `exclude` | Dependencies, build output, declarations, and story files | File patterns to skip |
+| `storiesDir` | Alongside the component | Subdirectory for generated stories |
+| `debugMode` | `false` | Enable debug logging |
+| `force` | `false` | Enable instrumentation in production builds |
+| `dedupeReact` | `'auto'` | Prevent conflicting React versions; `true` always deduplicates, `false` disables it |
+| `rsc` | `false` (`true` on Next.js) | Instrument only modules with their own `"use client"` directive |
+| `hookInjection` | `'html'` on Vite | Use `'entry'` for setups without an HTML transform |
+| `entry` | Unset | Entry-module patterns; required with `hookInjection: 'entry'` |
 
-  // Subdirectory for generated story files (relative to component)
-  storiesDir: undefined,
-
-  // Enable debug logging
-  debugMode: false,
-
-  // Force instrumentation in production (default: false)
-  force: false,
-
-  // Single-React enforcement for the prop serializer (React only).
-  // 'auto' (default) | true | false  — see "React version support" below.
-  dedupeReact: 'auto',
-
-  // React Server Components mode (React only, default: false).
-  // When true, only modules with a "use client" directive are instrumented
-  // (for Vite-based RSC frameworks like TanStack Start). Leave false for SPAs.
-  // See "React Server Components" in docs/REACT_PATTERNS.md.
-  rsc: false,
-
-  // How the devtools-hook script is delivered to the browser.
-  // 'html' (default): prepend an inline <script> to the served HTML.
-  // 'entry': inject a side-effect import into the app's entry module(s)
-  // instead — no HTML transform involved.
-  hookInjection: 'html',
-
-  // Picomatch pattern(s) identifying the app's entry module id(s).
-  // Required when hookInjection is 'entry'.
-  entry: undefined,
-})
-```
-
-### React version support (18 and 19)
-
-React detection reads the live React fiber tree via the DevTools global hook
-and never wraps your components, so the rendered tree stays clean and RSC
-keeps working. React 18 and 19 are both supported and covered by E2E.
-
-Which authoring patterns are detected, and the documented limitations, are in
-**[docs/REACT_PATTERNS.md](./docs/REACT_PATTERNS.md)**.
-
-The `dedupeReact` option matters when the plugin's bundled
-`react-element-to-jsx-string` resolves a different React major than your
-app's (for example your app is on React 18 but the plugin's copy is 19) —
-in that case prop serialization silently degrades to a "Failed to
-serialize" placeholder unless a single React instance is enforced.
-
-| Value | Behavior |
-|-------|----------|
-| `'auto'` *(default)* | Detects a React major mismatch and adds `react`/`react-dom` to `resolve.dedupe` **only when needed**. Single-version apps (the common React 19 case) get **no config mutation at all**. |
-| `true` | Always dedupe. |
-| `false` | Never dedupe. For advanced setups that intentionally run multiple React copies (module federation / micro-frontends). If a mismatch is detected while disabled, a one-line warning is logged. |
-
-If you set `dedupeReact: false` and need the fix manually, add this to your
-Vite config:
-
-```ts
-// vite.config.ts
-export default defineConfig({
-  resolve: { dedupe: ['react', 'react-dom'] },
-})
-```
-
-### Default Exclusions
-
-The following patterns are excluded by default:
-- `**/node_modules/**`
-- `**/dist/**`
-- `**/*.d.ts`
-- `**/*.stories.*`
-- `**/stories.*`
-- `**/*.story.*`
-- `**/story.*`
-
-## Generated Story Format
-
-The `Meta`/`StoryObj` import below comes from the framework package read out
-of your project's `.storybook/main` config (`@storybook/react-webpack5`,
-`@storybook/nextjs-vite`, etc.) — `@storybook/react-vite` and
-`@storybook/vue3-vite` shown here are just the defaults each playground
-uses. When no Storybook config is found, generation falls back to the
-framework's own default (`@storybook/react-vite` for React, `@storybook/vue3-vite`
-for Vue, `@storybook/nextjs` for the Next.js host).
-
-### React
-
-```typescript
-import type { Meta, StoryObj } from '@storybook/react-vite';
-import { fn } from 'storybook/test';
-import MyButton from './MyButton';
-import Icon from './Icon';
-
-const meta: Meta<typeof MyButton> = {
-  component: MyButton,
-};
-
-export default meta;
-type Story = StoryObj<typeof MyButton>;
-
-export const Primary: Story = {
-  args: {
-    variant: 'primary',
-    label: 'Click me',
-    icon: <Icon name="star" />,
-    onClick: fn(),
-  },
-};
-```
-
-### Vue
-
-```typescript
-import type { Meta, StoryObj } from '@storybook/vue3-vite';
-import Button from './Button.vue';
-
-const meta: Meta<typeof Button> = {
-  component: Button,
-};
-
-export default meta;
-type Story = StoryObj<typeof Button>;
-
-export const Secondary: Story = {
-  render: (args) => ({
-    components: { Button },
-    setup() {
-      const componentArgs = Object.fromEntries(
-        Object.entries(args).filter(([key]) => !key.startsWith('slot:')),
-      );
-      return { componentArgs };
-    },
-    template: `<Button v-bind="componentArgs">Click me</Button>`,
-  }),
-  args: {
-    variant: 'secondary',
-    size: 'default',
-  },
-};
-```
-
-### Supported Prop Types
-
-| Type | React | Vue | Generated Code |
-|------|-------|-----|----------------|
-| Primitives | `"hello"`, `42`, `true` | Same | Direct values |
-| Objects | `{ nested: { value: 1 } }` | Reactive objects auto-unwrapped | `{ nested: { value: 1 } }` |
-| Arrays | `[1, 2, 3]` | Same | `[1, 2, 3]` |
-| JSX Elements | `<Icon />` | N/A | `<Icon />` (with import) |
-| Vue Slots | N/A | `<slot />` | Template syntax in render function |
-| Functions | `onClick={handler}` | `@click="handler"` | `fn()` (with import) |
-| Children | `<>Hello <Button /></>` | Default slot content | Framework-specific syntax |
-
-## How it works
-
-Build-time transforms tag your components without wrapping or reconstructing
-them, so the rendered tree stays untouched. At runtime, each framework's
-DevTools hook reports component instances as they mount, and the plugin
-registers them with their metadata, props, and DOM elements. A client-side
-overlay renders highlights and the context menu on top of your running app.
-When you create a story, the serialized props are sent to the dev-server
-plugin, which writes the story file to disk. Interaction recording captures
-your clicks, typing, and selections as an ordered list of steps and formats
-them into a Storybook play function.
-
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the module-level
-breakdown.
+React 18 and 19 are supported. See [React patterns](./docs/REACT_PATTERNS.md)
+for supported component patterns and detection limitations.
 
 ## Keyboard Shortcuts Reference
 
@@ -532,7 +306,7 @@ breakdown.
 ## Limitations
 
 - **Framework scope** - Currently supports React, Vue, and Nuxt SSR through the Vue integration
-- **Bundler hosts** - Vite, Rsbuild, and Next.js (webpack) are supported; on Rsbuild, only `framework: 'react'` is playground/E2E-verified (Vue is accepted but unverified); Next.js is React-only (`@storybook/nextjs`) and only instruments `"use client"` modules
+- **Bundler hosts** - Vite, Rsbuild, and Next.js (webpack) are supported. Vue support on Rsbuild is not yet verified. Next.js only instruments modules with their own `"use client"` directive.
 - **Development only** - Disabled in production builds by default
 - **DevTools required** - Vite hosts need `@vitejs/devtools` for the dock panel and RPC; Rsbuild and Next.js hosts get the dock through a bundled devframe hub instead
 - **Provider dependencies** - Components requiring context providers may need Storybook decorators
@@ -552,86 +326,15 @@ breakdown.
 3. For React, use exported, named PascalCase components; in RSC mode the file must have its own `"use client"` directive
 4. For Vue, ensure the component has a `<script setup>` or `<script>` block
 
-### Duplicate editor RPC registration (`DF0021`)
-
-The Vite adapter reuses the editor service supplied by Vite DevTools' Messages
-plugin. It falls back to Vite's `/__open-in-editor` endpoint when that service
-is absent. Registering the service again after Devframe 1.1.0 initializes can
-race its existing installation. Rsbuild, Next, and standalone devframes declare
-the service before their shared initialization barrier.
-
 ### Story generation produces wrong imports
 
 1. Check that component references are in the live registry (rendered on screen)
 2. Vue components need the `.vue` extension in the import path
 
-## Development
+## Contributing
 
-### Setup
-
-```bash
-git clone https://github.com/storybookjs/vite-plugin-experimental-storybook-devtools.git
-cd vite-plugin-experimental-storybook-devtools
-
-pnpm install
-pnpm build
-```
-
-Use Node 24 and the pnpm version pinned in `package.json` for repository
-development. Build before tests and playground startup: runtime tests, the
-panel, and the Next/Rsbuild hosts load `dist`.
-
-### Available Scripts
-
-```bash
-# Run React playground
-pnpm --filter playground-react dev
-
-# Run Vue playground
-pnpm --filter playground-vue dev
-
-# Run Rsbuild playground (build first — its dev-time runtime is served from dist/)
-pnpm build
-pnpm --filter playground-rsbuild dev
-
-# Run Next.js playground (App Router, webpack — not Turbopack)
-pnpm --filter playground-next dev
-
-# Run unit tests
-pnpm test
-
-# Run E2E tests (starts playgrounds automatically)
-pnpm exec playwright test
-
-# Test real Storybook startup, disk writes, generated previews, and Docs
-# Keep port 6006 free; the suite restores story files and stops its own processes.
-pnpm exec playwright test --config=playwright.storybook.config.ts
-
-# Build the library
-pnpm build
-
-# Type check
-pnpm typecheck
-```
-
-Before release, run `pnpm build`, `pnpm test --run`, `pnpm typecheck`, and both
-Playwright suites above. CI runs the same checks. The regular suite covers
-React 18/19, Vue, Nuxt SSR, Rsbuild, and Next, including the first dock click,
-live prop edits, and interaction recording with real form inputs. The serial
-Storybook suite verifies actual writes and previews; React 18 deliberately
-has no Storybook config and exercises the launch-failure UI instead.
-
-To leave existing local servers running, choose a free port range and Storybook
-URL for QA (the URL setting applies only to the playgrounds):
-
-```bash
-PLAYWRIGHT_PORT_OFFSET=20 pnpm exec playwright test
-PLAYWRIGHT_PORT_OFFSET=20 STORYBOOK_E2E_URL=http://localhost:6007 \
-  pnpm exec playwright test --config=playwright.storybook.config.ts
-```
-
-Run the serial Storybook suite separately from unit tests and other browser
-suites: it temporarily changes shared playground story files.
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for how the tool works, local
+development, and testing.
 
 ## License
 

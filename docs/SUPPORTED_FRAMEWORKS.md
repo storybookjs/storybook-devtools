@@ -25,6 +25,16 @@ The shared browser suite exercises first-click highlighter activation and
 repeated close/reopen through the actual dock on all six playgrounds. A separate
 serial suite launches Storybook and verifies generated stories and previews on
 five hosts; React 18 intentionally tests the missing-config failure path.
+The playgrounds pin Storybook `11.0.0-alpha.1`; the full unit, browser and
+Storybook suites also pass on `10.6.0` (`node scripts/pin-storybook.mjs
+10.6.0` re-pins the workspace). The peer range is `>=10.6.0 || ^11.0.0-0`.
+Story format: `playground/vue` uses CSF factories (`definePreview` in
+`.storybook/preview.ts`, so new and appended stories are `meta.story(...)`);
+every other Storybook playground stays on CSF3, and the Storybook suite
+asserts each host's format. `@storybook/nextjs` is
+deprecated in Storybook 11 (it logs a deprecation warning on every run; the
+Next playground still uses it), and `vue-docgen-api` logs a deprecation warning
+for the Vue-based playgrounds.
 
 ## React
 

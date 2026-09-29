@@ -37,6 +37,11 @@ Read `docs/ARCHITECTURE.md` early for implementation/refactor tasks.
      (`src/frameworks/react/transform.test.ts` → "RSC mode");
      `e2e/playground-next-detection.spec.ts` covers the runtime registry.
    - React 18 and 19 are both required and both E2E-gated.
+   - `playground/vue` is the CSF-factories project (`definePreview` in
+     `.storybook/preview.ts`); the other Storybook playgrounds (react,
+     rsbuild, next, nuxt) stay on CSF3 so both generated formats keep E2E
+     coverage. The React playgrounds share one `src` tree but each has its
+     own `.storybook`, so they must all use the same story format.
    - Keep `docs/SUPPORTED_FRAMEWORKS.md` current.
 
 3. **Use shared test primitives**
@@ -152,6 +157,13 @@ ctx.rpc.requestTrustWithToken(token);
   the name aligns with the component and the badge stays within the viewport
 - Live prop editing (React AND Vue): the pencil on a prop row edits the live app; reset restores the original
 - Registry sync: `(await ctx.rpc.sharedState.get('component-highlighter:registry')).value()` returns the synced instances
+- Story format: `playground/vue` (factory preview) gets
+  `preview.meta(...)` / `meta.story(...)` files for Create and Create with
+  Interactions, and appends to an existing CSF3 file stay CSF3; every other
+  playground writes CSF3 (`e2e/story-format-helpers.ts`, asserted in
+  `e2e/storybook-integration.spec.ts`)
+- Launch: "Start Storybook" never opens a browser tab (`BROWSER=none` in the
+  child env; Storybook 11 builds that dropped `--no-open` reject that flag)
 - Inspector tabs: Properties is the default for a new component instance;
   Stories owns creation and previews. Docs appears only for a matching autodocs
   or attached MDX entry. Verify arrows/Home/End, one lazy docs iframe retained
@@ -208,6 +220,27 @@ Webpack/rspack do not watch stories outside the app import graph; tests
 must edit files without manually calling `invalidate()` to verify refresh.
 
 Run the broader test set too when the change touches more than one area.
+
+### Both Storybook majors
+
+The peer range is `>=10.6.0 || ^11.0.0-0`, and the workspace is pinned to one
+Storybook version at a time (currently `11.0.0-alpha.1`). Changes to launch,
+indexing, story generation or the writer must pass the full validation above
+on 10.6 and on 11. To run the other major, leave your tree's pins alone by
+saving copies of the root and playground `package.json` files and
+`pnpm-lock.yaml` first, then:
+
+```bash
+node scripts/pin-storybook.mjs 10.6.0   # re-pins storybook and @storybook/* everywhere
+pnpm install --no-frozen-lockfile
+# ...run the validation, then restore the saved files...
+pnpm install --frozen-lockfile
+```
+
+The playgrounds' own Vitest story projects are not wired into
+`pnpm --filter <playground> test` (the config nests `test.test`, so Vitest
+finds no files); run them through a config with a top-level `storybookTest`
+plugin when a change needs that check.
 
 CI runs the build, unit tests, typecheck, and both browser suites on Node 24.
 Shared E2E suites are registered by playground specs; select them with `-g`

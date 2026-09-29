@@ -14,7 +14,11 @@ import {
   collectRequiredImports,
   generateArgsContent,
   formatPlayFunctionForStory,
-  printImportStatement,
+  renderStoryFileHeader,
+  renderStoryExport,
+  wrapStoryObject,
+  newFileExportStyle,
+  type StoryFormat,
 } from '../../utils/story-generator'
 import { writeStoryIntoCsf, type CsfImportRequest } from '../../utils/csf-writer'
 
@@ -152,6 +156,7 @@ export async function generateStory(
     playFunction,
     playImports,
     storybookFramework,
+    storyFormat = { kind: 'csf3' },
   } = data
   const { componentName, filePath, isDefaultExport } = meta
 
@@ -213,9 +218,8 @@ export async function generateStory(
     imports,
     ...(playImports ? { playImports } : {}),
   })
-  const storyExportSource = renderStoryExport({
+  const storyObjectSource = renderStoryObject({
     componentName,
-    storyName,
     componentArgs,
     slotArgs,
     slotComponentRefs,
@@ -228,7 +232,9 @@ export async function generateStory(
       content: generateStoryContent({
         componentName,
         requiredImports,
-        storyExportSource,
+        storyName,
+        storyObjectSource,
+        format: storyFormat,
         ...(storybookFramework ? { storybookFramework } : {}),
       }),
       filePath: storyFilePath,
@@ -240,7 +246,7 @@ export async function generateStory(
   const written = await writeStoryIntoCsf({
     existingCode: existingContent,
     fileName: storyFilePath,
-    storyExportSource,
+    storyObjectSource,
     desiredExportName: storyName,
     requiredImports,
   })
@@ -256,10 +262,9 @@ export async function generateStory(
   }
 }
 
-/** Render the story export block, without touching the surrounding file */
-function renderStoryExport(options: {
+/** Render the story object literal, without the export around it */
+function renderStoryObject(options: {
   componentName: string
-  storyName: string
   componentArgs: SerializedProps
   slotArgs: Record<string, unknown>
   slotComponentRefs: Set<string>
@@ -268,7 +273,6 @@ function renderStoryExport(options: {
 }): string {
   const {
     componentName,
-    storyName,
     componentArgs,
     slotArgs,
     slotComponentRefs,
@@ -292,38 +296,35 @@ function renderStoryExport(options: {
     ? `\n${formatPlayFunctionForStory(playFunction)}`
     : ''
 
-  return `export const ${storyName}: Story = {${renderContent}${hasArgs ? `\n  args: ${argsContent},` : ''}${playContent}
-};
-`
+  return wrapStoryObject(
+    `${renderContent}${hasArgs ? `\n  args: ${argsContent},` : ''}${playContent}`,
+  )
 }
 
 /** Generate new story file content: header, imports, then the story export */
 function generateStoryContent(options: {
   componentName: string
   requiredImports: CsfImportRequest[]
-  storyExportSource: string
+  storyName: string
+  storyObjectSource: string
+  format: StoryFormat
   storybookFramework?: string
 }): string {
   const {
     componentName,
     requiredImports,
-    storyExportSource,
+    storyName,
+    storyObjectSource,
+    format,
     storybookFramework = '@storybook/vue3-vite',
   } = options
 
-  const importStatements = [
-    `import type { Meta, StoryObj } from '${storybookFramework}';`,
-    ...requiredImports.map(printImportStatement),
-  ].join('\n')
-
-  return `${importStatements}
-
-const meta: Meta<typeof ${componentName}> = {
-  component: ${componentName},
-};
-
-export default meta;
-type Story = StoryObj<typeof ${componentName}>;
-
-${storyExportSource}`
+  return (
+    renderStoryFileHeader({
+      componentName,
+      format,
+      storybookFramework,
+      requiredImports,
+    }) + renderStoryExport(newFileExportStyle(format), storyName, storyObjectSource)
+  )
 }

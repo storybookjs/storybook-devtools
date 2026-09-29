@@ -254,10 +254,39 @@ Concurrent saves to the same output file are queued around the complete
 read/generate/format/write operation, preventing lost exports.
 
 Each generator computes the story's required imports
-(`collectRequiredImports`) and the rendered `export const … : Story = {…}`
-block (`renderStoryExport`) once, then either hands both to
-`writeStoryIntoCsf` (the file exists) or prints them into the new-file
-template (it doesn't) — the two paths share one definition of both.
+(`collectRequiredImports`) and the story's object literal once, then either
+hands both to `writeStoryIntoCsf` (the file exists) or prints them into the
+new-file template (it doesn't). `renderStoryExport` in
+`src/utils/story-generator.ts` is the one definition of the export around
+the object, for both paths.
+
+**Story format.** Two formats are written: CSF3 (`export const X: Story =
+{…}`) and CSF factories (`export const X = meta.story({…})`, no
+`Meta`/`StoryObj` imports). A new file follows the project:
+`src/utils/csf-format.ts` (`resolveStoryFormat`) reports a factory project
+when `.storybook/preview` imports `definePreview` from a storybook package —
+Storybook's own `isCsfFactoryPreview(loadConfig(...))`, loaded lazily —
+and the renderer is React or Vue; a missing config directory, missing
+preview file, unparseable preview or other renderer means CSF3, never an
+error. The preview import specifier follows Storybook's new-story flow:
+`#.storybook/preview` when a `package.json` from the config directory up to
+the project root declares `imports`, else the relative path without
+extension (always `./`- or `../`-prefixed, unlike Storybook's own, which
+yields a bare `.storybook/preview` for a story next to the config dir). It
+must end in `/preview`, which `CsfFile` requires to accept
+`preview.meta(...)`. An *append* ignores the project's preview and follows
+the file (`detectExportStyle` in `csf-writer.ts`): `CsfFile._metaIsFactory`
+/ `_metaVariableName` give `<metaVar>.story({…})`; a CSF3 file reuses its
+first story's `: Type` annotation or `satisfies` clause, else the `Story`
+alias if the file declares one, else no annotation. Mixing formats makes
+`CsfFile` throw `MixedFactoryError`, so the text fallback also detects a
+factory file (`const x = preview.meta(`) and never emits CSF3 into it.
+
+**Line endings.** The writer detects the existing file's line ending (CRLF
+when most breaks are CRLF, else LF), passes it to `printCsf` as
+`lineTerminator` and normalises the result. `printCsf` defaults to `os.EOL`
+on Storybook 10 and always LF on 11, so relying on either default would
+change endings on one of them.
 
 **Fallback rule.** `writeStoryIntoCsf` returns `{ code, exportName,
 fallbackReason? }`. When `loadCsf` throws — a story file with
@@ -332,6 +361,16 @@ file is a story file" lives in `src/utils/story-files.ts` and is shared with
 `src/unplugin.ts`'s instrumentation `exclude` globs and `watchChange`
 filter.
 
+Index entries with `subtype: 'test'` (component tests, present in Storybook
+10.6 and 11) are not stories: Storybook nests them under their `parent`
+story in the sidebar and leaves them out of component entry selection, so
+`findStoryCandidates` skips them. That keeps them out of `hasStory`, story
+counts, story cards and "visit story"; entries without a `subtype` (older
+indexes, the file-scan fallback) count as stories. The local CSF indexer
+returns no entries for an empty or whitespace-only story file, as
+Storybook's own indexer does, instead of letting `loadCsf` reject it and
+fail the whole index.
+
 `StoryIndexGenerator.getIndex()` throws a `MultipleIndexingError` covering
 every file that failed to parse, not a partial index with those entries
 dropped, so one bad CSF file takes down the whole generated index for that
@@ -384,7 +423,8 @@ natively loaded csf-tools makes every append fall back to the text splice.
 **Peer dependency loading.** `storybook` is a required peer. Node-side
 code reaches `storybook/internal/*` through `src/storybook-peer.ts`
 (`loadStorybookInternal`, a memoised `createRequire` load behind a version
-check against the `peerDependencies` floor) or through a lazy `import()`,
+check against the `peerDependencies` floor, `>=10.6.0 || ^11.0.0-0`; the
+check compares prereleases per semver) or through a lazy `import()`,
 never through a static import in a host entry: ES module linking resolves
 every static import before any body runs, so a missing or too-old
 `storybook` would otherwise surface as a bare resolution error naming an
@@ -456,7 +496,13 @@ host has the same dock. `storybook-status` reports
 is false (a custom hub without the dock). The launch command is built by
 `storybook-launch.ts`, which detects the project's package manager via
 `storybook/internal/common`'s `JsPackageManagerFactory` and falls back to
-`npx` when detection fails. The child inherits the host dev server's env
+`npx` when detection fails; the command is `storybook dev -p <port>` with no
+browser flag. Storybook 10.6 and 11.0.0-alpha.1 open a browser by default
+and later 11 builds only with `--open`, while `--no-open` is an unknown
+option on the latter, so the child's env sets `BROWSER=none` instead — the
+launcher honours it in every version (`openBrowser` returns without opening) — and
+`--ci` is avoided because it also disables the prompts below. The child
+inherits the host dev server's env
 with `STORYBOOK=true` set and `PORT` pinned to Storybook's port: Storybook's
 CLI lets `PORT` override `-p`, and Next's dev server exports its own port
 under that name, so an inherited value would bind Storybook to the app's
@@ -522,7 +568,8 @@ their hub, so this plugin's installation is the only one there.
 | `src/panel/panel.ts` | DevTools panel tabs |
 | `src/utils/story-matching.ts` | Story-to-component matching against Storybook's `index.json`, visit-target selection, and docs-entry matching (`findDocsEntry`) |
 | `src/utils/instance-selection.ts` | Props fingerprinting and picking one live instance per variant for story creation, preferring an instance with live edits || `src/utils/story-generator.ts` | Shared story generation utilities (naming, args formatting) |
-| `src/utils/csf-writer.ts` | CSF-AST append/dedupe/import-merge for existing story files, with a regex-splice fallback, plus prettier formatting |
+| `src/utils/csf-writer.ts` | CSF-AST append/dedupe/import-merge for existing story files in the file's own format (CSF3 or factory) and line endings, with a regex-splice fallback, plus prettier formatting |
+| `src/utils/csf-format.ts` | Whether the project's preview is a CSF factory preview, and the preview import specifier for new factory story files |
 | `src/utils/normalize-runtime-imports.ts` | Normalizes runtime import specifiers across hosts |
 | `src/utils/storybook-docs-url.ts` | Resolves the Storybook docs URL for the "Open Docs" command |
 | `src/codegen/interactions-to-code.ts` | Converts recorded interactions to play-function code |

@@ -6,8 +6,16 @@ on:
     branches: [ main, master ]
 jobs:
   test:
+    name: test (storybook ${{ matrix.storybook }})
     timeout-minutes: 60
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # `locked` runs the Storybook version pinned in package.json and the
+        # lockfile; the other entries re-pin every storybook/@storybook/*
+        # dependency in the workspace to that exact version.
+        storybook: [locked, 10.6.0]
     steps:
     - uses: actions/checkout@v4
     - uses: actions/setup-node@v4
@@ -18,6 +26,9 @@ jobs:
       # Unpinned latest (11.x) applies stricter supply-chain policies that
       # reject entries in the current lockfile (ERR_PNPM_TRUST_DOWNGRADE).
       run: npm install -g pnpm@10.33.0 && pnpm install --frozen-lockfile
+    - name: Pin Storybook ${{ matrix.storybook }}
+      if: matrix.storybook != 'locked'
+      run: node scripts/pin-storybook.mjs ${{ matrix.storybook }} && pnpm install --no-frozen-lockfile
     - name: Install Playwright Browsers
       run: pnpm exec playwright install --with-deps
     - name: Build project
@@ -37,6 +48,6 @@ jobs:
     - uses: actions/upload-artifact@v4
       if: ${{ !cancelled() }}
       with:
-        name: playwright-report
+        name: playwright-report-storybook-${{ matrix.storybook }}
         path: playwright-report/
         retention-days: 30

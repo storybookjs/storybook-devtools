@@ -104,6 +104,57 @@ describe('findStoryCandidates', () => {
   })
 })
 
+describe('component test entries (subtype: "test")', () => {
+  // Storybook nests `subtype: 'test'` entries under their parent story in the
+  // sidebar and leaves them out of component entry selection, so they are not
+  // stories a component "has" or a user can be sent to.
+  const story: StoryIndexEntryLike = {
+    id: 'button--primary',
+    type: 'story',
+    subtype: 'story',
+    name: 'Primary',
+    exportName: 'Primary',
+    title: 'Button',
+    importPath: './src/Button.stories.tsx',
+    componentPath: './src/Button.tsx',
+  }
+  const test: StoryIndexEntryLike = {
+    ...story,
+    id: 'button--primary:clicks',
+    subtype: 'test',
+    name: 'Clicks',
+    exportName: 'Clicks',
+  }
+
+  it('leaves them out of the stories a component has', () => {
+    const found = findStoryCandidates(index(story, test), 'src/Button.tsx')
+    expect(found.map((e) => e.id)).toEqual(['button--primary'])
+  })
+
+  it('does not count a component with only test entries as having a story', () => {
+    expect(findStoryCandidates(index(test), 'src/Button.tsx')).toEqual([])
+  })
+
+  it('never navigates to a test entry, even when its name matches', () => {
+    expect(
+      pickStoryId(index(story, test), 'src/Button.tsx', 'Clicks', {
+        requirePreferred: true,
+      }),
+    ).toBeNull()
+    expect(pickStoryId(index(test, story), 'src/Button.tsx')).toBe(
+      'button--primary',
+    )
+  })
+
+  it('keeps entries without a subtype (older indexes) as stories', () => {
+    const legacy = { ...story }
+    delete legacy.subtype
+    expect(
+      findStoryCandidates(index(legacy), 'src/Button.tsx').map((e) => e.id),
+    ).toEqual(['button--primary'])
+  })
+})
+
 describe('real Storybook index v5 payload (componentPath + derived name)', () => {
   // Shape of a live Storybook 10 index.json: entries carry `componentPath`
   // (authoritative link to the component file), `name` is

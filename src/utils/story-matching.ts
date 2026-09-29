@@ -18,6 +18,11 @@ export interface StoryIndexEntryLike {
   componentPath?: string
   exportName?: string
   type?: string
+  /**
+   * `story` for a story, `test` for a component test nested under its
+   * `parent` story. Absent on indexes that predate subtypes.
+   */
+  subtype?: string
   tags?: string[]
   /** Docs entries only: story files this docs page must pre-load (`attached-mdx`). */
   storiesImports?: string[]
@@ -37,7 +42,9 @@ export function stripExtForMatch(p: string): string {
 
 /**
  * Collect the story entries belonging to a component file, preserving index
- * order. Matches by:
+ * order. Component test entries (`subtype: 'test'`) are skipped: Storybook
+ * nests them under their parent story, which is always in the same file, so
+ * they add no story the component lacks. Matches by:
  * 1. `componentPath` (Storybook index v5+) — the index's own authoritative
  *    story→component link. When an entry carries it, it decides membership
  *    outright (no heuristics for that entry);
@@ -61,7 +68,7 @@ export function findStoryCandidates(
 
   const results: StoryIndexEntryLike[] = []
   for (const entry of Object.values(entries)) {
-    if (entry.type !== 'story') continue
+    if (entry.type !== 'story' || entry.subtype === 'test') continue
 
     if (entry.componentPath) {
       if (stripExtForMatch(entry.componentPath) === componentBase) {

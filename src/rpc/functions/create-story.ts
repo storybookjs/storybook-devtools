@@ -6,6 +6,7 @@ import type { SerializedRegistryInstance } from '../../shared-types'
 import { getStorybookDevframeContext } from '../../context'
 import { ordinal } from '../../utils/instance-selection'
 import { formatStoryFile } from '../../utils/csf-writer'
+import { resolveStoryFormat, type StoryFormat } from '../../utils/csf-format'
 
 // Generating/formatting is async. Serialize read-modify-write per output
 // file so two save actions cannot overwrite each other's exports.
@@ -144,6 +145,18 @@ export const createStory = defineRpcFunction({
               logDebug(`Appending to existing story file: ${outputPath}`)
             }
 
+            // A new file follows the project's story format; an existing one
+            // keeps its own, which the writer detects.
+            let storyFormat: StoryFormat | undefined
+            if (existingContent === undefined) {
+              const project = await storyIndexService.project
+              storyFormat = await resolveStoryFormat({
+                configDir: project?.configDir,
+                renderer: project?.renderer,
+                storyFilePath: outputPath,
+              })
+            }
+
             // Dynamically import the framework-specific story generator
             let generateStory: typeof import('../../frameworks/react/story-generator').generateStory
 
@@ -172,6 +185,7 @@ export const createStory = defineRpcFunction({
               props: data.serializedProps,
               componentRegistry: registryMap,
               storybookFramework: await storybookFramework,
+              ...(storyFormat ? { storyFormat } : {}),
               ...(data.storyName ? { storyName: data.storyName } : {}),
               ...(existingContent ? { existingContent } : {}),
               ...(data.playFunction

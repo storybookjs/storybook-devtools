@@ -14,7 +14,7 @@ describe('resolveStorybookDevCommand', () => {
 
     expect(result).toEqual({
       command: 'pnpm',
-      args: ['exec', 'storybook', 'dev', '-p', '6006', '--no-open'],
+      args: ['exec', 'storybook', 'dev', '-p', '6006'],
     })
   })
 
@@ -40,7 +40,7 @@ describe('resolveStorybookDevCommand', () => {
 
     expect(result).toEqual({
       command: 'npx',
-      args: ['storybook', 'dev', '-p', '6006', '--no-open'],
+      args: ['storybook', 'dev', '-p', '6006'],
     })
     expect(logDebug).toHaveBeenCalledWith(
       expect.stringContaining('falling back to npx'),
@@ -72,7 +72,7 @@ describe('resolveStorybookDevCommand', () => {
 
     expect(result).toEqual({
       command: 'yarn',
-      args: ['exec', 'storybook', '--', 'dev', '-p', '6006', '--no-open'],
+      args: ['exec', 'storybook', '--', 'dev', '-p', '6006'],
     })
 
     vi.doUnmock('storybook/internal/common')
@@ -97,13 +97,31 @@ describe('buildStorybookEnv', () => {
       NODE_ENV: 'development',
       STORYBOOK: 'true',
       PORT: '6006',
+      BROWSER: 'none',
     })
+  })
+
+  it('sets BROWSER=none over an inherited value so Storybook never opens a tab', () => {
+    expect(
+      buildStorybookEnv({ BROWSER: 'firefox', BROWSER_ARGS: '-x' }, '6006'),
+    ).toMatchObject({ BROWSER: 'none' })
+  })
+
+  it('never depends on the --no-open / --open flags, which differ across Storybook versions', async () => {
+    const { args } = await resolveStorybookDevCommand({
+      cwd: process.cwd(),
+      port: '6006',
+      logDebug: () => {},
+    })
+    expect(args).not.toContain('--no-open')
+    expect(args).not.toContain('--open')
   })
 
   it('overrides an inherited STORYBOOK value', () => {
     expect(buildStorybookEnv({ STORYBOOK: 'false' }, '6006')).toEqual({
       STORYBOOK: 'true',
       PORT: '6006',
+      BROWSER: 'none',
     })
   })
 })

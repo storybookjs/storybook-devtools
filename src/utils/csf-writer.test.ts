@@ -2,12 +2,11 @@ import { describe, it, expect } from 'vitest'
 import { babelParse } from 'storybook/internal/babel'
 import { writeStoryIntoCsf } from './csf-writer'
 
-const story = `export const Primary: Story = {
+const story = `{
   args: {
     label: "Second",
   },
-};
-`
+}`
 
 const csf3 = `import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Button } from './Button';
@@ -24,7 +23,7 @@ export const Default: Story = {};
 
 const base = {
   fileName: '/project/src/Button.stories.tsx',
-  storyExportSource: story,
+  storyObjectSource: story,
   desiredExportName: 'Primary',
   requiredImports: [],
 }
@@ -128,7 +127,7 @@ export const Primary = { args: { label: 'Hello' } };
     const result = await writeStoryIntoCsf({
       ...base,
       existingCode: csf3 + "\nimport { spyOn as fn } from 'storybook/test';\n",
-      storyExportSource: 'export const Primary: Story = { args: { onClick: fn() } };',
+      storyObjectSource: '{ args: { onClick: fn() } }',
       requiredImports: [{ source: 'storybook/test', specifiers: ['fn'] }],
     })
     expect(result.fallbackReason).toBeUndefined()
@@ -141,7 +140,7 @@ export const Primary = { args: { label: 'Hello' } };
     const result = await writeStoryIntoCsf({
       ...base,
       existingCode: csf3.replace("import { Button } from './Button';", "import ExistingButton from './Button';"),
-      storyExportSource: 'export const Primary: Story = { render: () => Button };',
+      storyObjectSource: '{ render: () => Button }',
       requiredImports: [{ source: './Button', defaultSpecifier: 'Button' }],
     })
     expect(result.fallbackReason).toBeUndefined()
@@ -162,7 +161,7 @@ export const Primary = { args: { label: 'Hello' } };
     const result = await writeStoryIntoCsf({
       ...base,
       existingCode: csf3 + "\nimport { within as canvas } from 'storybook/test';",
-      storyExportSource: 'export const Primary: Story = { play: ({ canvasElement }) => { const canvas = within(canvasElement); } };',
+      storyObjectSource: '{ play: ({ canvasElement }) => { const canvas = within(canvasElement); } }',
       requiredImports: [{ source: 'storybook/test', specifiers: ['within'] }],
     })
     expect(result.fallbackReason).toBeUndefined()
@@ -175,7 +174,7 @@ export const Primary = { args: { label: 'Hello' } };
       ...base,
       desiredExportName: 'Button',
       existingCode: csf3.replace("import { Button } from './Button';", "import ExistingButton from './Button';"),
-      storyExportSource: 'export const Button: Story = { render: () => ({ components: { Button }, template: `<Button/>` }) };',
+      storyObjectSource: '{ render: () => ({ components: { Button }, template: `<Button/>` }) }',
       requiredImports: [{ source: './Button', defaultSpecifier: 'Button' }],
     })
     expect(result.exportName).toBe('Button2')
@@ -193,5 +192,150 @@ export const Primary = { args: { label: 'Hello' } };
     expect(result.code.replace(/\r\n/g, '\n')).not.toContain('\r')
     expect(result.code).toContain('export const Primary: Story = {\r\n')
   })
-})
 
+  describe('CSF factory files', () => {
+    const factory = `import preview from '../../.storybook/preview';
+
+import { Button } from './Button';
+
+const meta = preview.meta({
+  component: Button,
+});
+
+export const Default = meta.story({});
+`
+
+    it('appends a meta.story export, not a CSF3 object', async () => {
+      const result = await writeStoryIntoCsf({ ...base, existingCode: factory })
+
+      expect(result.fallbackReason).toBeUndefined()
+      expect(result.exportName).toBe('Primary')
+      expect(result.code).toContain('export const Primary = meta.story({')
+      expect(result.code).not.toContain(': Story')
+      expect(result.code).not.toMatch(/export const Primary = \{/)
+      expect(() => babelParse(result.code)).not.toThrow()
+    })
+
+    it("uses the file's own meta variable name", async () => {
+      const result = await writeStoryIntoCsf({
+        ...base,
+        existingCode: factory.replace('const meta =', 'const buttonMeta ='),
+      })
+
+      expect(result.fallbackReason).toBeUndefined()
+      expect(result.code).toContain('export const Primary = buttonMeta.story({')
+    })
+
+    it('handles preview.type<...>().meta(...)', async () => {
+      const result = await writeStoryIntoCsf({
+        ...base,
+        existingCode: factory.replace(
+          'preview.meta(',
+          'preview.type<{ args: { extra: string } }>().meta(',
+        ),
+      })
+
+      expect(result.fallbackReason).toBeUndefined()
+      expect(result.code).toContain('export const Primary = meta.story({')
+    })
+
+    it('parses back as a pure factory file with both stories indexed', async () => {
+      const { loadCsf } = await import('storybook/internal/csf-tools')
+      const result = await writeStoryIntoCsf({ ...base, existingCode: factory })
+      const csf = loadCsf(result.code, {
+        fileName: base.fileName,
+        makeTitle: (title: string) => title || 'Auto',
+      }).parse()
+
+      expect(csf._metaIsFactory).toBe(true)
+      expect(Object.keys(csf._storyExports)).toEqual(['Default', 'Primary'])
+    })
+
+    it('merges required imports and dedupes the export name', async () => {
+      const result = await writeStoryIntoCsf({
+        ...base,
+        desiredExportName: 'Default',
+        existingCode: factory,
+        storyObjectSource: '{ args: { onClick: fn() } }',
+        requiredImports: [{ source: 'storybook/test', specifiers: ['fn'] }],
+      })
+
+      expect(result.exportName).toBe('Default2')
+      expect(result.code).toContain("import { fn } from 'storybook/test';")
+      expect(result.code).toContain('export const Default2 = meta.story({')
+    })
+
+    it('still appends a factory export when the file cannot be parsed as CSF', async () => {
+      // A preview import that does not end in `/preview` is rejected by CsfFile.
+      const result = await writeStoryIntoCsf({
+        ...base,
+        existingCode: factory.replace('../../.storybook/preview', '../../.storybook/config'),
+      })
+
+      expect(result.fallbackReason).toBeTruthy()
+      expect(result.code).toContain('export const Primary = meta.story({')
+      expect(result.code).not.toContain(': Story')
+    })
+
+    it('never emits CSF3 into a factory file even when the export name collides', async () => {
+      const result = await writeStoryIntoCsf({
+        ...base,
+        desiredExportName: 'Default',
+        existingCode: factory,
+      })
+
+      expect(result.code.match(/meta\.story\(/g)).toHaveLength(2)
+      expect(result.code).not.toMatch(/export const \w+(: \w+)? = \{/)
+    })
+  })
+
+  describe('CSF3 typing style', () => {
+    it("reuses the existing stories' type annotation", async () => {
+      const result = await writeStoryIntoCsf({
+        ...base,
+        existingCode: csf3.replace(
+          'export const Default: Story = {};',
+          'export const Default: StoryObj<typeof meta> = {};',
+        ),
+      })
+
+      expect(result.code).toContain('export const Primary: StoryObj<typeof meta> = {')
+    })
+
+    it('reuses a satisfies clause', async () => {
+      const result = await writeStoryIntoCsf({
+        ...base,
+        existingCode: csf3.replace(
+          'export const Default: Story = {};',
+          'export const Default = {} satisfies Story;',
+        ),
+      })
+
+      expect(result.code).toMatch(/export const Primary = \{[\s\S]*\} satisfies Story;/)
+      expect(result.code).not.toContain('Primary: Story')
+    })
+
+    it('adds no annotation to an untyped file', async () => {
+      const untyped = `import { Button } from './Button';
+
+export default { component: Button };
+
+export const Default = {};
+`
+      const result = await writeStoryIntoCsf({ ...base, existingCode: untyped })
+
+      expect(result.fallbackReason).toBeUndefined()
+      expect(result.code).toContain('export const Primary = {')
+      expect(result.code).not.toContain('Story')
+    })
+
+    it('uses a Story alias the file declares even when no story is annotated yet', async () => {
+      const result = await writeStoryIntoCsf({
+        ...base,
+        existingCode: csf3.replace('export const Default: Story = {};', ''),
+      })
+
+      expect(result.code).toContain('export const Primary: Story = {')
+    })
+  })
+})

@@ -1,7 +1,10 @@
 import '../src/style.css'
-import type { Preview } from '@storybook/vue3-vite'
+import { definePreview } from '@storybook/vue3-vite'
+import addonA11y from '@storybook/addon-a11y'
+import addonDocs from '@storybook/addon-docs'
 
-const preview: Preview = {
+export default definePreview({
+  addons: [addonA11y(), addonDocs()],
   parameters: {
     controls: {
       matchers: {
@@ -17,6 +20,4 @@ const preview: Preview = {
       test: 'todo',
     },
   },
-}
-
-export default preview
+})
