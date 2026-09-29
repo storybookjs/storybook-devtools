@@ -221,21 +221,11 @@ must edit files without manually calling `invalidate()` to verify refresh.
 
 Run the broader test set too when the change touches more than one area.
 
-### Both Storybook majors
+### Storybook version
 
-The peer range is `>=10.6.0 || ^11.0.0-0`, and the workspace is pinned to one
-Storybook version at a time (currently `11.0.0-alpha.1`). Changes to launch,
-indexing, story generation or the writer must pass the full validation above
-on 10.6 and on 11. To run the other major, leave your tree's pins alone by
-saving copies of the root and playground `package.json` files and
-`pnpm-lock.yaml` first, then:
-
-```bash
-node scripts/pin-storybook.mjs 10.6.0   # re-pins storybook and @storybook/* everywhere
-pnpm install --no-frozen-lockfile
-# ...run the validation, then restore the saved files...
-pnpm install --frozen-lockfile
-```
+Run validation against the Storybook 11 version pinned in the workspace
+(currently `11.0.0-alpha.1`), using `pnpm install --frozen-lockfile`.
+CI runs this same version without a version matrix or dependency re-pinning.
 
 The playgrounds' own Vitest story projects are not wired into
 `pnpm --filter <playground> test` (the config nests `test.test`, so Vitest

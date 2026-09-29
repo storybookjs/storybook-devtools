@@ -75,9 +75,9 @@ PLAYWRIGHT_PORT_OFFSET=20 STORYBOOK_E2E_URL=http://localhost:6007 \
   pnpm exec playwright test --config=playwright.storybook.config.ts
 ```
 
-Launch, indexing, generation, and writer changes must pass validation on both
-Storybook 10.6 and 11. See [AGENTS.md](./AGENTS.md#both-storybook-majors) for the
-version-switching procedure.
+Local validation and CI use the Storybook 11 version pinned in the workspace.
+Install with `pnpm install --frozen-lockfile` and run the checks above; no
+version switching is required.
 
 ## How it works
 

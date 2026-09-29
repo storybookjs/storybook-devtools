@@ -778,7 +778,8 @@ run concurrently. Close active inspector previews on test ports, or use
 isolated playground ports, to prevent manual sessions from changing test state.
 
 CI builds first, then runs unit tests, typechecking, the regular browser suite,
-and the serial Storybook integration suite. Their HTML reports use separate
+and the serial Storybook integration suite against the workspace's locked
+Storybook 11 version. Their HTML reports use separate
 subdirectories so the second run does not overwrite the first.
 `PLAYWRIGHT_PORT_OFFSET` offsets all playground ports and disables reuse of
 existing servers; `STORYBOOK_E2E_URL` changes the playgrounds' Storybook URL and
