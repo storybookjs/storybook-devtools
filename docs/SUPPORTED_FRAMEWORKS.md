@@ -56,6 +56,10 @@ and host-specific options.
 
 ## Nuxt SSR
 
+- Standalone Storybook uses `@storybook/vue3-vite` with an explicit
+  `@vitejs/plugin-vue` in `.storybook/main.ts`. It does not inherit
+  Nuxt's Vite plugins. The panel-launch smoke suite verifies the preview.
+
 - Verified via `playground/nuxt`, `nuxt-chromium`, as an SSR consumer of
   the Vue integration. Package: `src/frameworks/nuxt/plugin.ts`, exporting
   `getNuxtDevToolsHookScript()` / `getNuxtViteDevToolsInjectionScript()`

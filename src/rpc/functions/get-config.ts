@@ -8,12 +8,13 @@ export const getConfig = defineRpcFunction({
   name: 'get-config',
   type: 'query',
   setup: (ctx) => {
-    const { storybookUrl, framework } = getStorybookDevframeContext(ctx)
+    const { storybookUrl, storybookFramework } =
+      getStorybookDevframeContext(ctx)
     return {
-      handler: () => ({
+      handler: async () => ({
         storybookUrl,
         cwd: ctx.cwd,
-        storybookDocsUrl: getStorybookDocsUrl(framework.storybookFramework),
+        storybookDocsUrl: getStorybookDocsUrl(await storybookFramework),
       }),
     }
   },

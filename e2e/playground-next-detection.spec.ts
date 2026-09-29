@@ -55,7 +55,9 @@ test.describe('Next.js playground detection coverage', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/')
     await page.waitForSelector('button')
-    await page.waitForTimeout(1000)
+    await expect.poll(() => getRegistrySnapshot(page), { timeout: 15_000 }).toMatchObject({
+      uniqueNames: expect.arrayContaining(['ClientApp', 'HydrationInfo']),
+    })
   })
 
   test('detects the expected client-component set on initial render', async ({

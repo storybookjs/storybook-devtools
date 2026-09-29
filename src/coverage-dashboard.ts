@@ -4,14 +4,14 @@
  * Creates a JSON-render dock panel showing component story coverage.
  * Uses the Vite DevTools json-render dock type for zero client code.
  *
- * This module is self-contained — it only depends on Node.js built-ins
- * and the DevTools Kit API shape, so it can be replaced or extended
- * without affecting other modules.
+ * Decides coverage from story index entries alone (`src/story-index.ts`),
+ * so it can be replaced or extended without affecting other modules.
  */
 
-import * as fs from 'fs'
 import * as path from 'path'
 import type { JsonRenderSpec } from '@vitejs/devtools-kit'
+import { findStoryCandidates, type StoryIndexEntryLike } from './utils/story-matching'
+import type { StoryIndexService } from './story-index'
 
 export interface CoverageEntry {
   componentName: string
@@ -28,47 +28,20 @@ export interface CoverageData {
   coveragePercent: number
 }
 
-const STORY_EXTENSIONS = [
-  '.stories.tsx',
-  '.stories.ts',
-  '.stories.jsx',
-  '.stories.js',
-]
-
-/**
- * Check if a component file has an associated story file.
- */
-function findStoryFile(
-  componentPath: string,
-  storiesDir?: string,
-): string | null {
-  const dir = path.dirname(componentPath)
-  const baseName = path.basename(componentPath, path.extname(componentPath))
-
-  const searchDirs = [dir]
-  if (storiesDir) {
-    searchDirs.push(path.join(dir, storiesDir))
-  }
-
-  for (const searchDir of searchDirs) {
-    for (const ext of STORY_EXTENSIONS) {
-      const candidate = path.join(searchDir, baseName + ext)
-      if (fs.existsSync(candidate)) {
-        return candidate
-      }
-    }
-  }
-
-  return null
-}
-
 /**
  * Compute coverage data from a set of known component file paths.
+ *
+ * Decides `hasStory` from story index entries (`src/story-index.ts`) the
+ * same way the panel matches against Storybook's live `index.json`
+ * (`findStoryCandidates`): on `componentPath`/`importPath`/title, so custom
+ * titles and stories living outside the component's own directory count.
+ * Pure and unit-testable: takes its inputs as data, never reaches into
+ * global state.
  */
 export function computeCoverage(
   componentPaths: Map<string, string>,
   projectRoot: string,
-  storiesDir?: string,
+  storyIndexEntries: Record<string, StoryIndexEntryLike>,
 ): CoverageData {
   const entries: CoverageEntry[] = []
   const seen = new Set<string>()
@@ -77,13 +50,20 @@ export function computeCoverage(
     if (seen.has(filePath)) continue
     seen.add(filePath)
 
-    const storyPath = findStoryFile(filePath, storiesDir)
+    const relativeFilePath = path.relative(projectRoot, filePath)
+    const candidates = findStoryCandidates(
+      storyIndexEntries,
+      relativeFilePath,
+      name,
+    )
     entries.push({
       componentName: name,
       filePath,
-      relativeFilePath: path.relative(projectRoot, filePath),
-      hasStory: storyPath !== null,
-      storyPath,
+      relativeFilePath,
+      hasStory: candidates.length > 0,
+      storyPath: candidates[0]?.importPath
+        ? path.resolve(projectRoot, candidates[0].importPath)
+        : null,
     })
   }
 
@@ -101,6 +81,19 @@ export function computeCoverage(
       : 0
 
   return { entries, totalComponents, coveredComponents, coveragePercent }
+}
+
+/**
+ * Coverage for the components a host has instrumented so far, against that
+ * host's story index. The index service owns the root the entries' paths are
+ * relative to, so coverage always compares like with like.
+ */
+export async function collectCoverage(
+  storyIndexService: StoryIndexService,
+  componentPaths: Map<string, string>,
+): Promise<CoverageData> {
+  const index = await storyIndexService.getIndex()
+  return computeCoverage(componentPaths, storyIndexService.cwd, index.entries)
 }
 
 /**

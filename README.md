@@ -11,7 +11,7 @@ Dev-server devtools for visual component highlighting and automatic Storybook st
 - **Append to Existing Stories** - Add new story variants to existing story files
 - **Smart Imports** - Automatically resolves and adds component imports
 - **DevTools Integration** - Dock panel with Storybook, Coverage, Terminal, and Docs tabs
-- **Coverage Dashboard** - Track story coverage across all detected components
+- **Coverage Dashboard** - Track story coverage across all detected components using the Storybook index, refreshed after story-file edits on every host
 - **Copy Prompt** - Copy LLM-friendly component context to clipboard for AI-assisted development
 - **Development Only** - Never runs in production builds
 - **Keyboard Shortcuts** - Quick toggles and navigation
@@ -28,6 +28,7 @@ yarn add @storybook/experimental-devtools
 
 ### Peer Dependencies
 
+- `storybook` >= 10.6.0
 - One bundler host: `vite` >= 5.0.0 with `@vitejs/devtools` >= 0.6.0, `@rsbuild/core` >= 1.1.7, or `next` (App Router, webpack dev)
 - One of: `react` >= 18.0.0 or `vue` >= 3.0.0
 
@@ -219,7 +220,7 @@ Options and caveats:
 - **`host`** — pin the sidecar server's bind address (e.g. `host: '127.0.0.1'`) to match `next dev -H 127.0.0.1`; the default (`'localhost'`) can resolve to an address the browser's websocket can't reach.
 - **Turbopack is unsupported.** Running `next dev` under Turbopack prints a warning and the app runs normally, without instrumentation. Run `next dev` without `--turbopack` on Next 15, or pass `--webpack` explicitly on majors where Turbopack is the default (Next 16+).
 - **`rsc`** *(default `true`)* — only modules with a `"use client"` directive are instrumented; server components are never registered or highlighted. A module that is client-only transitively (imported by a `"use client"` module but carrying no directive of its own) is not instrumented either — only modules with their own directive are tagged.
-- **Story generation** maps to `@storybook/nextjs`.
+- **Story generation** imports from the framework package read out of your `.storybook/main` config (e.g. `@storybook/nextjs-vite`); falls back to `@storybook/nextjs` when no Storybook config is found.
 - **Manual hook fallback** — if entry injection isn't viable in your setup, `getNextDevToolsHookScript()` returns the same hook script for manual delivery, e.g. via `<Script strategy="beforeInteractive">` in the root layout.
 
 ### Start developing
@@ -267,7 +268,9 @@ variant, size, type), then click **Create** for a story with the current
 props, or **Create with Interactions** to record clicks/typing/selections
 first and generate a story with a play function.
 
-The story file is created at `<component-dir>/<ComponentName>.stories.{ts,tsx}` (`.ts` for Vue, `.tsx` for React). If the file already exists, a new named export is appended.
+The story file is created at `<component-dir>/<ComponentName>.stories.{ts,tsx}` (`.ts` for Vue, `.tsx` for React). If the file already exists, a new named export is appended to it on the CSF syntax tree via Storybook's own `csf-tools`, so the rest of the file — comments, quote style, formatting — is left byte-identical, the export name is deduplicated against everything the file already declares, and imports the new story needs are merged into matching existing import statements. A story file that Storybook cannot parse as CSF still gets the new export, appended as text.
+
+Generated files are formatted with your project's prettier when you have one installed.
 
 ### Coverage Dashboard
 
@@ -278,6 +281,13 @@ component instance, deduplicating by props fingerprint; per-component
 buttons create one story at a time. When several instances share a
 fingerprint, the one with live prop edits is used, and the creation toast
 names which instance the story came from.
+
+Whether a component "has a story" is decided from a real Storybook story
+index built from your `stories` globs — the same matching Storybook itself
+uses, so it respects custom titles and stories living outside a component's
+own directory. If no Storybook project is found (or indexing fails), the
+index is instead synthesised from a scan for `<ComponentName>.stories.*`
+files, and coverage matches against that.
 
 ### DevTools Panel Tabs
 
@@ -373,6 +383,14 @@ The following patterns are excluded by default:
 - `**/story.*`
 
 ## Generated Story Format
+
+The `Meta`/`StoryObj` import below comes from the framework package read out
+of your project's `.storybook/main` config (`@storybook/react-webpack5`,
+`@storybook/nextjs-vite`, etc.) — `@storybook/react-vite` and
+`@storybook/vue3-vite` shown here are just the defaults each playground
+uses. When no Storybook config is found, generation falls back to the
+framework's own default (`@storybook/react-vite` for React, `@storybook/vue3-vite`
+for Vue, `@storybook/nextjs` for the Next.js host).
 
 ### React
 

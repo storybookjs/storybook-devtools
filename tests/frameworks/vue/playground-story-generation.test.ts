@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { generateStory } from '../../../src/frameworks/vue/story-generator'
 
 describe('vue story generation from playground-like props', () => {
-  it('generates a TaskList Vue story with expected imports and args', () => {
-    const story = generateStory({
+  it('generates a TaskList Vue story with expected imports and args', async () => {
+    const story = await generateStory({
       meta: {
         componentName: 'TaskList',
         filePath: '/repo/playground/vue/src/components/TaskList.vue',
@@ -27,7 +27,7 @@ describe('vue story generation from playground-like props', () => {
     expect(story.filePath).not.toContain('unknown')
   })
 
-  it('appends a new Vue story export to existing content', () => {
+  it('appends a new Vue story export to existing content', async () => {
     const existingContent = `
 import type { Meta, StoryObj } from '@storybook/vue3-vite';
 import TaskList from './TaskList.vue';
@@ -46,7 +46,7 @@ export const Default: Story = {
 };
 `
 
-    const story = generateStory({
+    const story = await generateStory({
       meta: {
         componentName: 'TaskList',
         filePath: '/repo/playground/vue/src/components/TaskList.vue',

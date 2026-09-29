@@ -14,15 +14,32 @@
  */
 
 // @ts-nocheck
-import { parse } from '@babel/parser'
-import traverseModule from '@babel/traverse'
-import generatorModule from '@babel/generator'
-import * as t from '@babel/types'
 import * as path from 'path'
+import type { types as T } from 'storybook/internal/babel'
 import type { TransformFunction, TransformOptions } from '../types'
+import { loadStorybookInternal } from '../../storybook-peer'
 
-const traverse = (traverseModule as any).default ?? traverseModule
-const generate = (generatorModule as any).default ?? generatorModule
+type BabelModule = typeof import('storybook/internal/babel')
+
+// Storybook's Babel re-exports, loaded on first use through the guarded
+// peer loader rather than a static import, so a missing or too-old
+// `storybook` fails with the peer requirement instead of a bare module
+// resolution error at host config load.
+let babelModule: BabelModule | undefined
+function babel(): BabelModule {
+  return (babelModule ??= loadStorybookInternal<BabelModule>('babel'))
+}
+const t = new Proxy({} as BabelModule['types'], {
+  get: (_target, key) =>
+    (babel().types as unknown as Record<PropertyKey, unknown>)[key],
+})
+const traverse: BabelModule['traverse'] = ((...args) =>
+  babel().traverse(...args)) as BabelModule['traverse']
+const generate: BabelModule['generate'] = ((...args) =>
+  babel().generate(...args)) as BabelModule['generate']
+
+const parse: BabelModule['parser']['parse'] = (...args) =>
+  babel().parser.parse(...args)
 
 function createHash(data: string): string {
   let hash = 0
@@ -46,7 +63,7 @@ const TAG_FN = '__chRegisterMeta'
  * this naturally handles either quote style and ignores `"use client"`
  * strings that appear deeper in the module.
  */
-function hasUseClientDirective(ast: t.File): boolean {
+function hasUseClientDirective(ast: T.File): boolean {
   return (ast.program.directives ?? []).some(
     (d) => d.value?.value === 'use client',
   )
@@ -60,7 +77,7 @@ function isComponentName(name: string | undefined | null): boolean {
   )
 }
 
-function isMemoOrForwardRef(node: t.Expression | null | undefined): boolean {
+function isMemoOrForwardRef(node: T.Expression | null | undefined): boolean {
   if (!node || node.type !== 'CallExpression') return false
   const callee = node.callee
   // Bare form: memo(...) / forwardRef(...)
@@ -81,7 +98,7 @@ function isMemoOrForwardRef(node: t.Expression | null | undefined): boolean {
   return false
 }
 
-function isComponentInit(node: t.Expression | null | undefined): boolean {
+function isComponentInit(node: T.Expression | null | undefined): boolean {
   if (!node) return false
   return (
     node.type === 'ArrowFunctionExpression' ||
@@ -140,16 +157,16 @@ export const transform: TransformFunction = (
     // Non-fatal detection gaps to surface as diagnostics.
     let anonDefaultLoc: string | null = null
     const unsupportedHoc = new Map<string, string>() // name -> file:line:col
-    const nodeLoc = (node: t.Node | null | undefined): string =>
+    const nodeLoc = (node: T.Node | null | undefined): string =>
       node?.loc
         ? `${id}:${node.loc.start.line}:${node.loc.start.column + 1}`
         : id
 
-    const considerFunction = (decl: t.FunctionDeclaration) => {
+    const considerFunction = (decl: T.FunctionDeclaration) => {
       const name = decl.id?.name
       if (name && isComponentName(name)) topLevelComponents.add(name)
     }
-    const considerVariable = (varDecl: t.VariableDeclaration) => {
+    const considerVariable = (varDecl: T.VariableDeclaration) => {
       for (const d of varDecl.declarations) {
         if (d.id.type !== 'Identifier' || !isComponentName(d.id.name)) continue
         if (isComponentInit(d.init)) {
@@ -165,7 +182,7 @@ export const transform: TransformFunction = (
         }
       }
     }
-    const considerClass = (decl: t.ClassDeclaration) => {
+    const considerClass = (decl: T.ClassDeclaration) => {
       const name = decl.id?.name
       if (name && isComponentName(name)) topLevelComponents.add(name)
     }

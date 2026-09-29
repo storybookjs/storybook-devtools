@@ -1,5 +1,6 @@
 import { defineRpcFunction } from 'devframe'
 import { getStorybookDevframeContext } from '../../context'
+import { hasTerminalsDock } from '../../storybook-process'
 
 export const storybookStatus = defineRpcFunction({
   name: 'storybook-status',
@@ -17,9 +18,15 @@ export const storybookStatus = defineRpcFunction({
         } catch {
           running = false
         }
-        // Surfaced so the panel can distinguish "still starting" from "the
-        // start attempt's process already died" while it polls this query.
-        return { running, startFailure: state.storybookStartFailure }
+        // `startFailure` lets the panel distinguish "still starting" from
+        // "the start attempt's process already died" while it polls this
+        // query; `terminalDockAvailable` tells it whether an "Open Terminal"
+        // affordance has a dock to open.
+        return {
+          running,
+          startFailure: state.storybookStartFailure,
+          terminalDockAvailable: hasTerminalsDock(state),
+        }
       },
     }
   },

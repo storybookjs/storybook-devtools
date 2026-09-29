@@ -5,6 +5,24 @@ import type { SerializedProps } from '../../frameworks'
 import type { SerializedRegistryInstance } from '../../shared-types'
 import { getStorybookDevframeContext } from '../../context'
 import { ordinal } from '../../utils/instance-selection'
+import { formatStoryFile } from '../../utils/csf-writer'
+
+// Generating/formatting is async. Serialize read-modify-write per output
+// file so two save actions cannot overwrite each other's exports.
+const writes = new Map<string, Promise<void>>()
+async function lockStoryFile(filePath: string): Promise<() => void> {
+  const previous = writes.get(filePath)
+  let release!: () => void
+  const current = new Promise<void>(resolve => {
+    release = resolve
+  })
+  writes.set(filePath, current)
+  await previous
+  return () => {
+    if (writes.get(filePath) === current) writes.delete(filePath)
+    release()
+  }
+}
 
 export interface ComponentStoryData {
   meta: {
@@ -42,8 +60,15 @@ export const createStory = defineRpcFunction({
   name: 'create-story',
   type: 'action',
   setup: (ctx) => {
-    const { framework, writeStoryFiles, storiesDir, logDebug, state } =
-      getStorybookDevframeContext(ctx)
+    const {
+      framework,
+      writeStoryFiles,
+      storiesDir,
+      logDebug,
+      state,
+      storybookFramework,
+      storyIndexService,
+    } = getStorybookDevframeContext(ctx)
     return {
       handler: async (data: ComponentStoryData) => {
         logDebug(
@@ -55,6 +80,7 @@ export const createStory = defineRpcFunction({
 
         // Generate and write the story file
         if (writeStoryFiles && data.serializedProps) {
+          let releaseWrite: (() => void) | undefined
           try {
             // Convert component registry from object to Map
             const registryMap = new Map<string, string>()
@@ -107,6 +133,8 @@ export const createStory = defineRpcFunction({
               )
             }
 
+            releaseWrite = await lockStoryFile(outputPath)
+
             // Check if file already exists
             let existingContent: string | undefined
             if (fs.existsSync(outputPath)) {
@@ -129,7 +157,7 @@ export const createStory = defineRpcFunction({
               throw new Error(`Unsupported framework: ${framework.name}`)
             }
 
-            const story = generateStory({
+            const story = await generateStory({
               meta: {
                 componentName: data.meta.componentName,
                 filePath: data.meta.filePath,
@@ -141,7 +169,7 @@ export const createStory = defineRpcFunction({
               },
               props: data.serializedProps,
               componentRegistry: registryMap,
-              storybookFramework: framework.storybookFramework,
+              storybookFramework: await storybookFramework,
               ...(data.storyName ? { storyName: data.storyName } : {}),
               ...(existingContent ? { existingContent } : {}),
               ...(data.playFunction
@@ -151,6 +179,12 @@ export const createStory = defineRpcFunction({
                 ? { playImports: data.playImports }
                 : {}),
             })
+
+            if (story.fallbackReason) {
+              logDebug(
+                `Story file could not be appended to on the CSF AST, spliced as text instead: ${story.fallbackReason}`,
+              )
+            }
 
             if (data.playFunction?.length) {
               logDebug(
@@ -164,11 +198,17 @@ export const createStory = defineRpcFunction({
               fs.mkdirSync(outputDir, { recursive: true })
             }
 
-            // Write the story file
-            fs.writeFileSync(outputPath, story.content, 'utf-8')
+            // Write the story file, formatted with the user project's
+            // prettier when it has one (a no-op otherwise).
+            const formatted = await formatStoryFile(outputPath, story.content)
+            fs.writeFileSync(outputPath, formatted, 'utf-8')
             logDebug(
               `Story "${story.storyName}" ${existingContent ? 'added to' : 'created in'}: ${outputPath}`,
             )
+            // Hosts without watch-based invalidation (or a slower watcher)
+            // still see the new/updated story immediately on the next
+            // coverage request.
+            storyIndexService.invalidate(outputPath)
 
             const verb = existingContent ? 'added to' : 'created in'
             const sourceNote =
@@ -228,6 +268,8 @@ export const createStory = defineRpcFunction({
               ],
               optional: true,
             })
+          } finally {
+            releaseWrite?.()
           }
         }
       },

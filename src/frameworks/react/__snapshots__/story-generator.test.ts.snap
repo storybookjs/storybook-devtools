@@ -1,0 +1,301 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`react generateStory — append to existing file > adds a referenced component import 1`] = `
+"import type { Meta, StoryObj } from '@storybook/react-vite';
+import { Button } from './Button';
+
+import { Icon } from './Icon';
+
+const meta = {
+  component: Button,
+} satisfies Meta<typeof Button>;
+
+export default meta;
+type Story = StoryObj<typeof meta>;
+
+export const Default: Story = {
+  args: { label: 'Hello' },
+};
+
+export const Default2: Story = {
+  args: {
+    icon: <Icon name="star" />,
+  },
+};
+"
+`;
+
+exports[`react generateStory — append to existing file > adds the fn import when the file has no storybook/test import 1`] = `
+"import type { Meta, StoryObj } from '@storybook/react-vite';
+import { Button } from './Button';
+
+import { fn } from 'storybook/test';
+
+const meta = {
+  component: Button,
+} satisfies Meta<typeof Button>;
+
+export default meta;
+type Story = StoryObj<typeof meta>;
+
+export const Default: Story = {
+  args: { label: 'Hello' },
+};
+
+export const Default2: Story = {
+  args: {
+    onClick: fn(),
+  },
+};
+"
+`;
+
+exports[`react generateStory — append to existing file > appends to a CSF3 satisfies-meta file 1`] = `
+"import type { Meta, StoryObj } from '@storybook/react-vite';
+import { Button } from './Button';
+
+const meta = {
+  component: Button,
+} satisfies Meta<typeof Button>;
+
+export default meta;
+type Story = StoryObj<typeof meta>;
+
+export const Default: Story = {
+  args: { label: 'Hello' },
+};
+
+export const Primary: Story = {
+  args: {
+    label: "Second",
+    variant: "primary",
+  },
+};
+"
+`;
+
+exports[`react generateStory — append to existing file > appends to a file containing a CSF2 story 1`] = `
+"import type { Meta } from '@storybook/react-vite';
+import { Button } from './Button';
+
+export default { component: Button } as Meta<typeof Button>;
+
+export const Old = () => <Button label="old" />;
+
+export const Primary: Story = {
+  args: {
+    label: "New",
+    variant: "primary",
+  },
+};
+"
+`;
+
+exports[`react generateStory — append to existing file > appends to a file with an inline default export 1`] = `
+"import { Button } from './Button';
+
+export default { component: Button };
+
+export const Default = {
+  args: { label: 'Hello' },
+};
+
+export const Default2: Story = {
+  args: {
+    label: "Second",
+  },
+};
+"
+`;
+
+exports[`react generateStory — append to existing file > appends when meta's component is a different component 1`] = `
+"import type { Meta, StoryObj } from '@storybook/react-vite';
+import { Card } from './Card';
+
+import { Button } from './Button';
+
+const meta = {
+  component: Card,
+} satisfies Meta<typeof Card>;
+
+export default meta;
+type Story = StoryObj<typeof meta>;
+
+export const Default: Story = {};
+
+export const Default2: Story = {
+  args: {
+    label: "Hi",
+  },
+};
+"
+`;
+
+exports[`react generateStory — append to existing file > merges fn into an existing storybook/test import 1`] = `
+"import type { Meta, StoryObj } from '@storybook/react-vite';
+import { Button } from './Button';
+import { expect, fn } from 'storybook/test';
+
+const meta = {
+  component: Button,
+} satisfies Meta<typeof Button>;
+
+export default meta;
+type Story = StoryObj<typeof meta>;
+
+export const Default: Story = {
+  args: { label: 'Hello' },
+};
+
+export const Default2: Story = {
+  args: {
+    onClick: fn(),
+  },
+};
+"
+`;
+
+exports[`react generateStory — append to existing file > merges play imports into a partially populated storybook/test import 1`] = `
+"import type { Meta, StoryObj } from '@storybook/react-vite';
+import { Button } from './Button';
+import { within, userEvent, expect } from 'storybook/test';
+
+const meta = {
+  component: Button,
+} satisfies Meta<typeof Button>;
+
+export default meta;
+type Story = StoryObj<typeof meta>;
+
+export const Default: Story = {
+  args: { label: 'Hello' },
+};
+
+export const Default2: Story = {
+  args: {
+    label: "Hi",
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("button"));
+  },
+};
+"
+`;
+
+exports[`react generateStory — append to existing file > preserves leading comments, blank lines, single quotes and trailing commas 1`] = `
+"// Button stories.
+// Keep these in sync with the design system.
+
+import type { Meta, StoryObj } from '@storybook/react-vite'
+import { Button } from './Button'
+
+const meta = {
+  component: Button,
+  args: {
+    label: 'Hello',
+  },
+} satisfies Meta<typeof Button>
+
+export default meta
+type Story = StoryObj<typeof meta>
+
+/** The resting state. */
+export const Default: Story = {
+  args: {
+    label: 'Hello',
+  },
+}
+
+export const Ghost: Story = {
+  args: {
+    label: "Second",
+    variant: "ghost",
+  },
+};
+"
+`;
+
+exports[`react generateStory — append to existing file > suffixes the export name when the story name is taken 1`] = `
+"import type { Meta, StoryObj } from '@storybook/react-vite';
+import { Button } from './Button';
+
+const meta = {
+  component: Button,
+} satisfies Meta<typeof Button>;
+
+export default meta;
+type Story = StoryObj<typeof meta>;
+
+export const Default: Story = {
+  args: { label: 'Hello' },
+};
+
+export const Default2: Story = {
+  args: {
+    label: "Again",
+  },
+};
+"
+`;
+
+exports[`react generateStory — new file > emits a play function and its imports 1`] = `
+"import type { Meta, StoryObj } from '@storybook/react-vite';
+import { userEvent, expect, within } from 'storybook/test';
+import { Button } from './Button';
+
+const meta: Meta<typeof Button> = {
+  component: Button,
+};
+
+export default meta;
+type Story = StoryObj<typeof Button>;
+
+export const Default: Story = {
+  args: {
+    label: "Hi",
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("button"));
+    await expect(canvas.getByRole("button")).toBeInTheDocument();
+  },
+};
+"
+`;
+
+exports[`react generateStory — new file > serialises primitive, object, array, function and JSX props 1`] = `
+"import React from 'react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
+import { fn } from 'storybook/test';
+import { Button } from './Button';
+import { Icon } from './Icon';
+
+const meta: Meta<typeof Button> = {
+  component: Button,
+};
+
+export default meta;
+type Story = StoryObj<typeof Button>;
+
+export const Default: Story = {
+  args: {
+    label: "Click me",
+    disabled: false,
+    count: 3,
+    config: {
+      size: "lg",
+      nested: {
+        deep: true,
+      },
+    },
+    items: [
+      "a",
+      "b",
+    ],
+    onClick: fn(),
+    icon: <Icon name="star" />,
+  },
+};
+"
+`;

@@ -15,6 +15,10 @@ export const storybookIndex = defineRpcFunction({
           })
           return await r.json()
         } catch {
+          // Storybook isn't running (yet). The panel navigates by story id,
+          // so only Storybook's own index can answer this — an empty index
+          // reads as "no stories yet" instead of offering ids that resolve
+          // to nothing.
           return { v: 0, entries: {} }
         }
       },

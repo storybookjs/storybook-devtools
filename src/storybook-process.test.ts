@@ -3,6 +3,7 @@ import type { StorybookDevframeState } from './context'
 import {
   adoptStorybookSession,
   extractErrorSnippet,
+  hasTerminalsDock,
   notifyStorybookFailure,
   STORYBOOK_SESSION_ID,
   TERMINALS_DOCK_ID,
@@ -172,8 +173,11 @@ describe('extractErrorSnippet', () => {
 })
 
 describe('notifyStorybookFailure', () => {
-  it('posts an error message with an open-terminal activate action', () => {
+  it('posts an error message with an open-terminal activate action when the Terminals dock exists', () => {
     const state = buildState()
+    state.devtoolsDocks = {
+      values: () => [{ id: TERMINALS_DOCK_ID }, { id: 'storybook-devtools' }],
+    }
     const calls: Array<{ message: string; extra: Record<string, unknown> }> = []
     state.devtoolsMessages = {
       error: (message: string, extra: Record<string, unknown>) => {
@@ -195,8 +199,40 @@ describe('notifyStorybookFailure', () => {
     ])
   })
 
+  it('omits the open-terminal action when no Terminals dock is registered', () => {
+    const state = buildState()
+    state.devtoolsDocks = { values: () => [{ id: 'storybook-devtools' }] }
+    const calls: Array<{ message: string; extra: Record<string, unknown> }> = []
+    state.devtoolsMessages = {
+      error: (message: string, extra: Record<string, unknown>) => {
+        calls.push({ message, extra })
+        return Promise.resolve()
+      },
+    }
+
+    notifyStorybookFailure(state)
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.extra).not.toHaveProperty('actions')
+    expect(calls[0]?.extra['description']).toContain('shell')
+  })
+
   it('is a no-op without a messages host', () => {
     const state = buildState()
     expect(() => notifyStorybookFailure(state)).not.toThrow()
+  })
+})
+
+describe('hasTerminalsDock', () => {
+  it('is false without a docks host or without the dock', () => {
+    expect(hasTerminalsDock(buildState())).toBe(false)
+    const state = buildState()
+    state.devtoolsDocks = { values: () => [] }
+    expect(hasTerminalsDock(state)).toBe(false)
+  })
+
+  it('is true when the Terminals dock is registered', () => {
+    const state = buildState()
+    state.devtoolsDocks = { values: () => [{ id: TERMINALS_DOCK_ID }] }
+    expect(hasTerminalsDock(state)).toBe(true)
   })
 })

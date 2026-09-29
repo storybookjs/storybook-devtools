@@ -76,7 +76,8 @@
   "peerDependencies": {
     "@rsbuild/core": ">=1.1.7",
     "@vitejs/devtools": ">=0.6.0",
-    "next": ">=15.0.0"
+    "next": ">=15.0.0",
+    "storybook": ">=10.6.0"
   },
   "peerDependenciesMeta": {
     "@rsbuild/core": {
@@ -87,9 +88,6 @@
     }
   },
   "devDependencies": {
-    "@babel/parser": "^7.28.6",
-    "@babel/traverse": "^7.28.6",
-    "@babel/types": "^7.28.6",
     "@playwright/test": "^1.57.0",
     "@rsbuild/core": "^2.1.13",
     "@tsconfig/strictest": "^2.0.8",
@@ -102,20 +100,21 @@
     "bumpp": "^10.3.2",
     "pkg-pr-new": "^0.0.75",
     "playwright": "^1.57.0",
+    "storybook": "10.6.0",
     "tsdown": "^0.18.1",
     "typescript": "^5.9.3",
     "vite": "^8.1.0",
     "vitest": "^4.1.9"
   },
   "dependencies": {
-    "@babel/generator": "^7.28.6",
     "@devframes/hub": "^0.9.5",
     "@devframes/hub-ui": "^0.9.5",
     "@devframes/next": "0.9.5",
+    "@devframes/plugin-terminals": "0.9.5",
     "@devframes/service-open": "0.9.5",
     "@medv/finder": "^3.1.0",
     "@testing-library/dom": "^10.4.0",
-    "devframe": "^0.9.5",
+    "devframe": "^0.9.12",
     "dom-accessibility-api": "^0.6.3",
     "nanoevents": "^9.0.0",
     "react-element-to-jsx-string": "^15.0.0",

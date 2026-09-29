@@ -1,0 +1,220 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`vue generateStory — append to existing file > adds the fn import when the file has no storybook/test import 1`] = `
+"import type { Meta, StoryObj } from '@storybook/vue3-vite';
+import BaseButton from './BaseButton.vue';
+
+import { fn } from 'storybook/test';
+
+const meta = {
+  component: BaseButton,
+} satisfies Meta<typeof BaseButton>;
+
+export default meta;
+type Story = StoryObj<typeof meta>;
+
+export const Default: Story = {
+  args: { label: 'Hello' },
+};
+
+export const Default2: Story = {
+  args: {
+    onClick: fn(),
+  },
+};
+"
+`;
+
+exports[`vue generateStory — append to existing file > appends a slot render template and its component import 1`] = `
+"import type { Meta, StoryObj } from '@storybook/vue3-vite';
+import BaseButton from './BaseButton.vue';
+
+import BaseIcon from './BaseIcon.vue';
+
+const meta = {
+  component: BaseButton,
+} satisfies Meta<typeof BaseButton>;
+
+export default meta;
+type Story = StoryObj<typeof meta>;
+
+export const Default: Story = {
+  args: { label: 'Hello' },
+};
+
+export const Default2: Story = {
+  render: (args) => ({
+    components: { BaseButton, BaseIcon },
+    setup() {
+      const componentArgs = Object.fromEntries(
+        Object.entries(args).filter(([key]) => !key.startsWith('slot:')),
+      );
+      return { componentArgs };
+    },
+    template: \`<BaseButton v-bind="componentArgs"><BaseIcon name="star" /></BaseButton>\`,
+  }),
+};
+"
+`;
+
+exports[`vue generateStory — append to existing file > appends to a CSF3 satisfies-meta file 1`] = `
+"import type { Meta, StoryObj } from '@storybook/vue3-vite';
+import BaseButton from './BaseButton.vue';
+
+const meta = {
+  component: BaseButton,
+} satisfies Meta<typeof BaseButton>;
+
+export default meta;
+type Story = StoryObj<typeof meta>;
+
+export const Default: Story = {
+  args: { label: 'Hello' },
+};
+
+export const Primary: Story = {
+  args: {
+    label: "Second",
+    variant: "primary",
+  },
+};
+"
+`;
+
+exports[`vue generateStory — append to existing file > merges play imports into an existing storybook/test import 1`] = `
+"import type { Meta, StoryObj } from '@storybook/vue3-vite';
+import BaseButton from './BaseButton.vue';
+import { within, userEvent, expect } from 'storybook/test';
+
+const meta = {
+  component: BaseButton,
+} satisfies Meta<typeof BaseButton>;
+
+export default meta;
+type Story = StoryObj<typeof meta>;
+
+export const Default: Story = {
+  args: { label: 'Hello' },
+};
+
+export const Default2: Story = {
+  args: {
+    label: "Hi",
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("button"));
+  },
+};
+"
+`;
+
+exports[`vue generateStory — append to existing file > preserves leading comments, blank lines and single quotes 1`] = `
+"// BaseButton stories.
+
+import type { Meta, StoryObj } from '@storybook/vue3-vite'
+import BaseButton from './BaseButton.vue'
+
+const meta = {
+  component: BaseButton,
+} satisfies Meta<typeof BaseButton>
+
+export default meta
+type Story = StoryObj<typeof meta>
+
+export const Default: Story = {
+  args: {
+    label: 'Hello',
+  },
+}
+
+export const Ghost: Story = {
+  args: {
+    label: "Second",
+    variant: "ghost",
+  },
+};
+"
+`;
+
+exports[`vue generateStory — append to existing file > suffixes the export name when the story name is taken 1`] = `
+"import type { Meta, StoryObj } from '@storybook/vue3-vite';
+import BaseButton from './BaseButton.vue';
+
+const meta = {
+  component: BaseButton,
+} satisfies Meta<typeof BaseButton>;
+
+export default meta;
+type Story = StoryObj<typeof meta>;
+
+export const Default: Story = {
+  args: { label: 'Hello' },
+};
+
+export const Default2: Story = {
+  args: {
+    label: "Again",
+  },
+};
+"
+`;
+
+exports[`vue generateStory — new file > builds a render template from slot args 1`] = `
+"import type { Meta, StoryObj } from '@storybook/vue3-vite';
+import BaseButton from './BaseButton.vue';
+import BaseIcon from './BaseIcon.vue';
+
+const meta: Meta<typeof BaseButton> = {
+  component: BaseButton,
+};
+
+export default meta;
+type Story = StoryObj<typeof BaseButton>;
+
+export const Default: Story = {
+  render: (args) => ({
+    components: { BaseButton, BaseIcon },
+    setup() {
+      const componentArgs = Object.fromEntries(
+        Object.entries(args).filter(([key]) => !key.startsWith('slot:')),
+      );
+      return { componentArgs };
+    },
+    template: \`<BaseButton v-bind="componentArgs"><BaseIcon name="star" /><template #footer>Footer text</template></BaseButton>\`,
+  }),
+  args: {
+    label: "With slots",
+  },
+};
+"
+`;
+
+exports[`vue generateStory — new file > serialises props and imports the component with a .vue extension 1`] = `
+"import type { Meta, StoryObj } from '@storybook/vue3-vite';
+import { fn } from 'storybook/test';
+import BaseButton from './BaseButton.vue';
+
+const meta: Meta<typeof BaseButton> = {
+  component: BaseButton,
+};
+
+export default meta;
+type Story = StoryObj<typeof BaseButton>;
+
+export const Default: Story = {
+  args: {
+    label: "Click me",
+    disabled: false,
+    config: {
+      size: "lg",
+    },
+    items: [
+      "a",
+      "b",
+    ],
+    onClick: fn(),
+  },
+};
+"
+`;

@@ -1,6 +1,10 @@
 import { defineRpcFunction } from 'devframe'
 import { getStorybookDevframeContext } from '../../context'
 import {
+  buildStorybookEnv,
+  resolveStorybookDevCommand,
+} from '../../storybook-launch'
+import {
   adoptStorybookSession,
   notifyStorybookFailure,
   STORYBOOK_SESSION_ID,
@@ -10,7 +14,7 @@ export const startStorybook = defineRpcFunction({
   name: 'start-storybook',
   type: 'action',
   setup: (ctx) => {
-    const { storybookUrl, state } = getStorybookDevframeContext(ctx)
+    const { storybookUrl, state, logDebug } = getStorybookDevframeContext(ctx)
     return {
       handler: async () => {
         if (state.storybookSession) {
@@ -32,27 +36,22 @@ export const startStorybook = defineRpcFunction({
           )
           if (stale) state.devtoolsTerminals.remove(stale)
 
+          const port = new URL(storybookUrl).port || '6006'
+          const { command, args } = await resolveStorybookDevCommand({
+            cwd: ctx.cwd,
+            port,
+            logDebug,
+          })
+
           // A PTY session: the Terminals dock renders it writable, so
           // interactive prompts (e.g. Storybook's port-conflict question)
           // can actually be answered, and the process sees a real TTY.
           const session = await state.devtoolsTerminals.startPtySession(
             {
-              command: 'npx',
-              args: [
-                'storybook',
-                'dev',
-                '-p',
-                new URL(storybookUrl).port || '6006',
-                '--no-open',
-              ],
+              command,
+              args,
               cwd: ctx.cwd,
-              // Same env the playgrounds' own `storybook` scripts set: app
-              // bundler configs use it to keep this plugin out of
-              // Storybook's builder (which loads the same config file).
-              env: { ...process.env, STORYBOOK: 'true' } as Record<
-                string,
-                string
-              >,
+              env: buildStorybookEnv(process.env, port),
             },
             {
               id: STORYBOOK_SESSION_ID,

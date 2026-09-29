@@ -5,6 +5,7 @@ import type {
   FunctionSerializedValue,
 } from '../frameworks/types'
 import * as path from 'path'
+import type { CsfImportRequest } from './csf-writer'
 
 // Re-export types for consumers
 export type { SerializedProps, JSXSerializedValue, FunctionSerializedValue }
@@ -35,6 +36,71 @@ export interface GeneratedStory {
   imports: Array<{ name: string; path: string }>
   /** The story name that was used */
   storyName: string
+  /**
+   * Why the CSF AST append was abandoned for the text-splice fallback, when
+   * it was (`src/utils/csf-writer.ts`).
+   */
+  fallbackReason?: string
+}
+
+/**
+ * The imports an appended story needs on top of what the story file already
+ * has: `fn` for function props, the play function's `storybook/test` names,
+ * and the component imports the story renders.
+ */
+export function collectRequiredImports(options: {
+  props: SerializedProps
+  imports: Array<{ name: string; path: string }>
+  playImports?: string[]
+}): CsfImportRequest[] {
+  const requests: CsfImportRequest[] = []
+
+  const testNames = collectStorybookTestNames(options.props, options.playImports)
+  if (testNames.length > 0) {
+    requests.push({ source: 'storybook/test', specifiers: testNames })
+  }
+
+  for (const imp of options.imports) {
+    if (imp.name.startsWith('{')) {
+      requests.push({
+        source: imp.path,
+        specifiers: [imp.name.replace(/[{}]/g, '').trim()],
+      })
+    } else {
+      requests.push({ source: imp.path, defaultSpecifier: imp.name.trim() })
+    }
+  }
+
+  return requests
+}
+
+/** Render an import request as the source line a new story file carries. */
+export function printImportStatement(request: CsfImportRequest): string {
+  const bindings: string[] = []
+  if (request.defaultSpecifier) bindings.push(request.defaultSpecifier)
+  if (request.specifiers?.length) {
+    bindings.push(`{ ${request.specifiers.join(', ')} }`)
+  }
+  return `import ${request.typeOnly ? 'type ' : ''}${bindings.join(', ')} from '${request.source}';`
+}
+
+/**
+ * The `storybook/test` bindings a story needs: `fn` for mocked function
+ * props, plus every name the recorded play function imports (the client only
+ * ever generates `storybook/test` imports — see `src/codegen/`).
+ */
+export function collectStorybookTestNames(
+  props: SerializedProps,
+  playImports?: string[],
+): string[] {
+  const names = new Set<string>()
+  if (hasAnyFunctionProps(props)) names.add('fn')
+  for (const playImport of playImports ?? []) {
+    for (const name of extractStorybookTestImports(playImport)) {
+      names.add(name)
+    }
+  }
+  return [...names]
 }
 
 /**

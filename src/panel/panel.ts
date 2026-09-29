@@ -8,6 +8,7 @@
  */
 
 import { connectDevframe, type DevframeRpcClient } from 'devframe/client'
+import { storyNameFromExport } from 'storybook/internal/csf/csf-utils'
 import { propEditability } from '../client/utils/prop-utils'
 import { createPropEditor } from '../client/utils/prop-editor'
 import {
@@ -695,6 +696,20 @@ type SbStartFailure = { code: number | null; detail?: string | null }
 type SbStatus = {
   running: boolean
   startFailure?: SbStartFailure | null | undefined
+  /** Whether the host has a Terminals dock the Storybook session can be opened in. */
+  terminalDockAvailable?: boolean
+}
+
+/**
+ * Last known answer from `storybook-status`. Render "Open Terminal" only
+ * when the host reports an available dock.
+ */
+let terminalDockAvailable = false
+
+function openTerminalButton(id: string): string {
+  return terminalDockAvailable
+    ? `<button class="start-btn" id="${id}">Open Terminal</button>`
+    : ''
 }
 
 function renderStorybookState(state: SbState, failure?: SbStartFailure | null) {
@@ -728,7 +743,7 @@ function renderStorybookState(state: SbState, failure?: SbStartFailure | null) {
         <div class="sb-state">
           <div class="spinner"></div>
           <div class="msg">Starting Storybook\u2026</div>
-          <button class="start-btn" id="sb-viewlog-btn">Open Terminal</button>
+          ${openTerminalButton('sb-viewlog-btn')}
         </div>`
       document
         .getElementById('sb-viewlog-btn')
@@ -751,7 +766,7 @@ function renderStorybookState(state: SbState, failure?: SbStartFailure | null) {
               : ''
           }
           <div class="btn-row">
-            <button class="start-btn" id="sb-error-btn">Open Terminal</button>
+            ${openTerminalButton('sb-error-btn')}
             <button class="start-btn" id="sb-retry-btn">Try again</button>
           </div>
         </div>`
@@ -767,7 +782,8 @@ function renderStorybookState(state: SbState, failure?: SbStartFailure | null) {
 
 /**
  * Put the Storybook pane into its failed state — the failure detail lives
- * in the Terminals dock's Storybook session, a click away via its button.
+ * in the Terminals dock's Storybook session, a click away via its button on
+ * hosts that have that dock.
  */
 function markStorybookStartFailed(failure: SbStartFailure | null | undefined) {
   renderStorybookState('failed', failure)
@@ -779,6 +795,7 @@ async function getStorybookStatus(): Promise<SbStatus> {
     const data = (await rpcCall(
       'component-highlighter:storybook-status',
     )) as SbStatus
+    terminalDockAvailable = data.terminalDockAvailable === true
     return { running: data.running === true, startFailure: data.startFailure }
   } catch {
     return { running: false }
@@ -1295,19 +1312,20 @@ async function buildCoveragePanel(coverage: CoverageData) {
 let selectedComponent: RegistryInstance | null = null
 
 /**
- * Scroll a story card into view after creation — match the requested name
- * loosely (the index title-cases it); fall back to the newest card.
+ * Scroll a story card into view after creation — match the requested export
+ * name against its Storybook-derived display name; fall back to the newest
+ * card.
  */
 function scrollToStoryCard(name?: string) {
   const cards = document.querySelectorAll<HTMLElement>('.hl-story-card')
   if (cards.length === 0) return
-  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '')
   let target: HTMLElement | undefined
   if (name) {
+    const expectedName = storyNameFromExport(name)
     target = Array.from(cards).find(
       (c) =>
-        norm(c.querySelector('.hl-story-label')?.textContent || '') ===
-        norm(name),
+        (c.querySelector('.hl-story-label')?.textContent || '') ===
+        expectedName,
     )
   }
   const card = target ?? cards[cards.length - 1]
@@ -1395,12 +1413,12 @@ async function refreshStoriesAfterCreate(
     hdr.innerHTML = `<span class="hl-section-title">Stories <span class="cov-section-count">${stories.length}</span></span>`
   }
 
-  const norm = (str: string) => str.toLowerCase().replace(/[^a-z0-9]/g, '')
+  const expectedName = storyNameFromExport(requestedName)
   const target =
     Array.from(list.querySelectorAll<HTMLElement>('.hl-story-card')).find(
       (c) =>
-        norm(c.querySelector('.hl-story-label')?.textContent || '') ===
-        norm(requestedName),
+        (c.querySelector('.hl-story-label')?.textContent || '') ===
+        expectedName,
     ) ??
     appended ??
     list.lastElementChild
@@ -1771,7 +1789,7 @@ async function buildHighlighterPanel() {
           // Retry with cache busting until the index contains the NEW story —
           // a non-empty list isn't enough, pre-existing stories satisfy that
           // immediately while the indexer is still catching up.
-          const norm = (str: string) => str.toLowerCase().replace(/[^a-z0-9]/g, '')
+          const expectedName = storyNameFromExport(requestedName)
           for (let i = 0; i < 20; i++) {
             storybookIndexCache = null
             const stories = await findMatchingStories(
@@ -1779,8 +1797,7 @@ async function buildHighlighterPanel() {
               comp.meta.componentName,
             )
             const fresh = stories.some(
-              (st) =>
-                !preIds.has(st.id) || norm(st.name) === norm(requestedName),
+              (st) => !preIds.has(st.id) || st.name === expectedName,
             )
             if (fresh) {
               const updated = await refreshStoriesAfterCreate(

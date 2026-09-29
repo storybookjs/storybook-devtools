@@ -1,3 +1,5 @@
+import vue from '@vitejs/plugin-vue'
+import { mergeConfig } from 'vite'
 import type { StorybookConfig } from '@storybook/vue3-vite'
 
 const config: StorybookConfig = {
@@ -8,6 +10,8 @@ const config: StorybookConfig = {
     '@storybook/addon-docs',
   ],
   framework: '@storybook/vue3-vite',
+  // Nuxt configures Vue for its app server; standalone Storybook needs it too.
+  viteFinal: config => mergeConfig(config, { plugins: [vue()] }),
 }
 
 export default config

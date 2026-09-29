@@ -31,6 +31,12 @@ import {
 import { registerStorybookHubSurfaces } from './hub-setup'
 import { ConsoleNotificationService } from './notifications'
 import { resolveReactDedupe } from './react-dedupe'
+import {
+  resolveStorybookFramework,
+  type CreateStorybookDevframeDeps,
+} from './context'
+import { createStoryIndexService } from './story-index'
+import { createTerminalsDevframe } from '@devframes/plugin-terminals'
 
 export interface StorybookDevtoolsRsbuildOptions
   extends ComponentHighlighterOptions {
@@ -159,24 +165,49 @@ export function storybookDevtoolsRsbuild(
     storybookStartFailure: null,
   }
 
-  // No `loadDevSource`: the rspack host has no equivalent of Vite's
-  // `server.transformRequest` — the built dist runtime files are always
-  // served instead of dev source.
-  const host: ComponentHighlighterUnpluginHost = {
-    isServe: () => isServe,
-    transformedComponents: state.transformedComponents,
-    getDiagnostics: () => chDiagnostics,
-  }
-
-  const unplugin = createComponentHighlighterUnplugin(
-    framework,
-    pluginOptions,
-    host,
-  )
-
   return {
     name: 'rsbuild-plugin-storybook-devtools',
     setup(api: RsbuildPluginAPI) {
+      // Kicked off now, awaited later by the handlers that need it (story
+      // generation, the docs URL) — not on this setup path.
+      const storyIndexService = createStoryIndexService({
+        cwd: api.context.rootPath,
+        logDebug,
+      })
+
+      // No `loadDevSource`: the rspack host has no equivalent of Vite's
+      // `server.transformRequest` — the built dist runtime files are always
+      // served instead of dev source.
+      const host: ComponentHighlighterUnpluginHost = {
+        isServe: () => isServe,
+        transformedComponents: state.transformedComponents,
+        getDiagnostics: () => chDiagnostics,
+        onStoryFileChange: (filePath, event) =>
+          storyIndexService.invalidate(filePath, {
+            removed: event === 'delete',
+          }),
+      }
+
+      const unplugin = createComponentHighlighterUnplugin(
+        framework,
+        pluginOptions,
+        host,
+      )
+
+      const deps: CreateStorybookDevframeDeps = {
+        framework,
+        storybookUrl,
+        writeStoryFiles,
+        storiesDir,
+        logDebug,
+        state,
+        storybookFramework: resolveStorybookFramework(
+          storyIndexService,
+          framework,
+        ),
+        storyIndexService,
+      }
+
       api.modifyRspackConfig((config, utils) => {
         isServe = utils.isDev
         config.plugins ??= []
@@ -215,18 +246,13 @@ export function storybookDevtoolsRsbuild(
       })
 
       api.onBeforeStartDevServer(async ({ server }) => {
-        const definition = createStorybookDevframe({
-          framework,
-          storybookUrl,
-          writeStoryFiles,
-          storiesDir,
-          logDebug,
-          state,
-        })
+        const definition = createStorybookDevframe(deps)
 
         const hub = initHub({
           base: DEVFRAMES_HUB_BASE,
-          devframes: [definition],
+          // Same Terminals dock `@vitejs/devtools` mounts on the Vite host, so
+          // "Open Terminal" reaches the Storybook session here as well.
+          devframes: [definition, createTerminalsDevframe()],
           ui: createUi(),
           ws: { sidecar: true },
           // Node's 'localhost' can bind IPv6-only ([::1]) while browsers on a
@@ -237,10 +263,8 @@ export function storybookDevtoolsRsbuild(
           auth: clientAuth,
           configure(ctx) {
             const { diagnostics } = registerStorybookHubSurfaces(ctx, {
-              state,
-              storiesDir,
+              deps,
               devtoolsDockId,
-              storybookFramework: framework.storybookFramework,
               dockClientScript: {
                 importFrom: CLIENT_BUNDLE_PUBLIC_PATH,
                 importName: 'default',

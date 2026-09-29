@@ -8,7 +8,12 @@ import { createRequire } from 'module'
 import { ConsoleNotificationService } from './notifications'
 import { resolveReactDedupe } from './react-dedupe'
 import { createStorybookDevframe } from './devframe'
-import type { StorybookDevframeState } from './context'
+import {
+  resolveStorybookFramework,
+  type CreateStorybookDevframeDeps,
+  type StorybookDevframeState,
+} from './context'
+import { createStoryIndexService, type StoryIndexService } from './story-index'
 import {
   createComponentHighlighterUnplugin,
   getComponentHighlighterRuntimePaths,
@@ -141,6 +146,14 @@ export function createComponentHighlighterPlugin(
 
   const runtimePaths = getComponentHighlighterRuntimePaths(framework)
 
+  // The plugin factory runs before Vite resolves `root` (a monorepo with
+  // `root` set, or a Nuxt-driven Vite context, means `process.cwd()` is not
+  // the app root). Built in `configResolved` below, once `config.root` is
+  // known, instead of here — `.storybook` lookup, the scan fallback, and
+  // every importPath-relative path the service produces depend on it.
+  let storyIndexService: StoryIndexService | undefined
+  let storybookFrameworkPromise: Promise<string> | undefined
+
   const {
     devtoolsDockId = 'component-highlighter',
     storybookUrl = 'http://localhost:6006',
@@ -185,6 +198,10 @@ export function createComponentHighlighterPlugin(
     transformedComponents: state.transformedComponents,
     getDiagnostics: () => chDiagnostics,
     getBase: () => resolvedBase,
+    onStoryFileChange: (filePath, event) =>
+      storyIndexService?.invalidate(filePath, {
+        removed: event === 'delete',
+      }),
   }
 
   // The unplugin-produced Vite plugin carries the portable hooks: transform
@@ -203,6 +220,14 @@ export function createComponentHighlighterPlugin(
       isServe = config.command === 'serve'
       resolvedBase = config.base || '/'
       cspNonce = (config as { html?: { cspNonce?: string } }).html?.cspNonce
+      storyIndexService = createStoryIndexService({
+        cwd: path.resolve(config.root),
+        logDebug,
+      })
+      storybookFrameworkPromise = resolveStorybookFramework(
+        storyIndexService,
+        framework,
+      )
     },
     config: (viteConfig) => {
       viteConfig.optimizeDeps ??= {}
@@ -354,14 +379,32 @@ export function createComponentHighlighterPlugin(
     },
   }
 
-  const definition = createStorybookDevframe({
+  // Constructed before configResolved; these getters are first read during
+  // devframe setup, after the resolved Vite root initializes both services.
+  const deps: CreateStorybookDevframeDeps = {
     framework,
     storybookUrl,
     writeStoryFiles,
     storiesDir,
     logDebug,
     state,
-  })
+    get storybookFramework() {
+      return (
+        storybookFrameworkPromise ??
+        Promise.resolve(framework.storybookFramework)
+      )
+    },
+    get storyIndexService() {
+      if (!storyIndexService) {
+        throw new Error(
+          '[component-highlighter] storyIndexService accessed before configResolved ran',
+        )
+      }
+      return storyIndexService
+    },
+  }
+
+  const definition = createStorybookDevframe(deps)
 
   // Kit-only setup: docks, commands, terminals, messages, diagnostics — none
   // of these are part of the portable `DevframeNodeContext`, so they're wired
@@ -381,10 +424,8 @@ export function createComponentHighlighterPlugin(
     // with `viteConfig`/`viteServer`/`createJsonRenderer` added — everything
     // below this point works against that shared, bundler-neutral shape.
     const { diagnostics } = registerStorybookHubSurfaces(ctx, {
-      state,
-      storiesDir,
+      deps,
       devtoolsDockId,
-      storybookFramework: framework.storybookFramework,
       dockClientScript: {
         importFrom:
           '@storybook/experimental-devtools/client/vite-devtools',

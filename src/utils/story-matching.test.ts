@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
+import { storyNameFromExport, toId } from 'storybook/internal/csf/csf-utils'
 import {
   findStoryCandidates,
-  normaliseStoryName,
   pickStoryId,
   stripExtForMatch,
   type StoryIndexEntryLike,
@@ -26,14 +26,6 @@ describe('stripExtForMatch', () => {
     )
     expect(stripExtForMatch('./src/components/TaskForm.stories.ts')).toBe(
       'src/components/TaskForm',
-    )
-  })
-})
-
-describe('normaliseStoryName', () => {
-  it('matches export names against Storybook display names', () => {
-    expect(normaliseStoryName('Filled Form')).toBe(
-      normaliseStoryName('FilledForm'),
     )
   })
 })
@@ -111,46 +103,113 @@ describe('findStoryCandidates', () => {
   })
 })
 
-describe('real Storybook index v5 payload (componentPath + derived casing)', () => {
-  // Verbatim shape from a live Storybook 10 index.json for the Vue
-  // playground: entries carry `componentPath` (authoritative link to the
-  // component file) and Storybook re-derives name/exportName casing from the
-  // written export (`FilledForm` → `Filledform`).
+describe('real Storybook index v5 payload (componentPath + derived name)', () => {
+  // Shape of a live Storybook 10 index.json: entries carry `componentPath`
+  // (authoritative link to the component file), `name` is
+  // `storyNameFromExport(exportName)` (Storybook inserts spaces before
+  // capital runs and digit runs), and `id` is `toId(title, name)`.
+  const initialStoryName = storyNameFromExport('InitialStory')
+  const filledFormName = storyNameFromExport('FilledForm')
+  const title = 'components/TaskForm'
   const v5Index = index(
     {
-      id: 'components-taskform--initialstory',
+      id: toId(title, initialStoryName),
       type: 'story',
-      name: 'Initialstory',
-      title: 'components/TaskForm',
+      name: initialStoryName,
+      title,
       importPath: './src/components/TaskForm.stories.ts',
       componentPath: './src/components/TaskForm.vue',
-      exportName: 'Initialstory',
+      exportName: 'InitialStory',
     },
     {
-      id: 'components-taskform--filledform',
+      id: toId(title, filledFormName),
       type: 'story',
-      name: 'Filledform',
-      title: 'components/TaskForm',
+      name: filledFormName,
+      title,
       importPath: './src/components/TaskForm.stories.ts',
       componentPath: './src/components/TaskForm.vue',
-      exportName: 'Filledform',
+      exportName: 'FilledForm',
     },
   )
 
   it('matches candidates through componentPath', () => {
     const found = findStoryCandidates(v5Index, 'src/components/TaskForm.vue')
     expect(found.map((e) => e.id)).toEqual([
-      'components-taskform--initialstory',
-      'components-taskform--filledform',
+      toId(title, initialStoryName),
+      toId(title, filledFormName),
     ])
   })
 
-  it('navigates to the just-created story despite re-derived casing', () => {
+  it('navigates to the just-created story by its exact derived display name', () => {
     expect(
       pickStoryId(v5Index, 'src/components/TaskForm.vue', 'FilledForm', {
         requirePreferred: true,
       }),
-    ).toBe('components-taskform--filledform')
+    ).toBe(toId(title, filledFormName))
+  })
+
+  it('matches export names Storybook renders with inserted spaces before digit and acronym runs', () => {
+    // storyNameFromExport('Button2') -> 'Button 2';
+    // storyNameFromExport('HTMLPreview') -> 'HTML Preview'. A loose
+    // lower-case/strip-spaces comparison would also pass here, but so would
+    // unrelated names that happen to share the same letters — exact
+    // derivation is the only check that rules those out.
+    const digitsAndAcronyms = index(
+      {
+        id: toId('Button', storyNameFromExport('Button2')),
+        type: 'story',
+        name: storyNameFromExport('Button2'),
+        title: 'Button',
+        importPath: './src/components/Button.stories.tsx',
+        componentPath: './src/components/Button.tsx',
+        exportName: 'Button2',
+      },
+      {
+        id: toId('Button', storyNameFromExport('HTMLPreview')),
+        type: 'story',
+        name: storyNameFromExport('HTMLPreview'),
+        title: 'Button',
+        importPath: './src/components/Button.stories.tsx',
+        componentPath: './src/components/Button.tsx',
+        exportName: 'HTMLPreview',
+      },
+    )
+    expect(
+      pickStoryId(digitsAndAcronyms, 'src/components/Button.tsx', 'Button2', {
+        requirePreferred: true,
+      }),
+    ).toBe(toId('Button', storyNameFromExport('Button2')))
+    expect(
+      pickStoryId(
+        digitsAndAcronyms,
+        'src/components/Button.tsx',
+        'HTMLPreview',
+        { requirePreferred: true },
+      ),
+    ).toBe(toId('Button', storyNameFromExport('HTMLPreview')))
+  })
+
+  it('matches via exportName when the index name was overridden by a CSF `name` annotation', () => {
+    // `export const primaryWithLongLabel = { name: 'Custom Label', ... }`
+    // — the index `name` no longer derives from the export identifier, so
+    // matching must fall back to the raw `exportName`.
+    const overridden = index({
+      id: toId('Button', 'Custom Label'),
+      type: 'story',
+      name: 'Custom Label',
+      title: 'Button',
+      importPath: './src/components/Button.stories.tsx',
+      componentPath: './src/components/Button.tsx',
+      exportName: 'primaryWithLongLabel',
+    })
+    expect(
+      pickStoryId(
+        overridden,
+        'src/components/Button.tsx',
+        'primaryWithLongLabel',
+        { requirePreferred: true },
+      ),
+    ).toBe(toId('Button', 'Custom Label'))
   })
 
   it('componentPath is authoritative — a different component never matches, even with a similar file name', () => {
@@ -188,7 +247,7 @@ describe('pickStoryId', () => {
     },
   )
 
-  it('prefers the story matching preferredStoryName (normalised)', () => {
+  it('prefers the story matching preferredStoryName (exact derived display name)', () => {
     expect(
       pickStoryId(taskFormIndex, 'src/components/TaskForm.vue', 'FilledForm'),
     ).toBe('components-taskform--filled-form')

@@ -12,8 +12,8 @@ describe('generateStory', () => {
   }
 
   describe('basic story generation', () => {
-    it('should generate a basic story file', () => {
-      const result = generateStory({
+    it('should generate a basic story file', async () => {
+      const result = await generateStory({
         meta: baseMeta,
         props: {
           label: 'Click me',
@@ -31,8 +31,8 @@ describe('generateStory', () => {
       expect(result.content).toContain('disabled: false')
     })
 
-    it('should use default export import syntax for default exports', () => {
-      const result = generateStory({
+    it('should use default export import syntax for default exports', async () => {
+      const result = await generateStory({
         meta: { ...baseMeta, isDefaultExport: true },
         props: { label: 'Test' },
       })
@@ -40,8 +40,8 @@ describe('generateStory', () => {
       expect(result.content).toContain("import Button from './Button'")
     })
 
-    it('should use named export import syntax for named exports', () => {
-      const result = generateStory({
+    it('should use named export import syntax for named exports', async () => {
+      const result = await generateStory({
         meta: { ...baseMeta, isDefaultExport: false },
         props: { label: 'Test' },
       })
@@ -49,8 +49,8 @@ describe('generateStory', () => {
       expect(result.content).toContain("import { Button } from './Button'")
     })
 
-    it('should use the provided storybookFramework for the Meta/StoryObj import', () => {
-      const result = generateStory({
+    it('should use the provided storybookFramework for the Meta/StoryObj import', async () => {
+      const result = await generateStory({
         meta: baseMeta,
         props: { label: 'Test' },
         storybookFramework: '@storybook/nextjs',
@@ -61,8 +61,8 @@ describe('generateStory', () => {
       )
     })
 
-    it('should default to @storybook/react-vite when storybookFramework is not provided', () => {
-      const result = generateStory({
+    it('should default to @storybook/react-vite when storybookFramework is not provided', async () => {
+      const result = await generateStory({
         meta: baseMeta,
         props: { label: 'Test' },
       })
@@ -74,8 +74,8 @@ describe('generateStory', () => {
   })
 
   describe('story naming', () => {
-    it('should use custom story name when provided', () => {
-      const result = generateStory({
+    it('should use custom story name when provided', async () => {
+      const result = await generateStory({
         meta: baseMeta,
         props: { label: 'Test' },
         storyName: 'CustomName',
@@ -86,8 +86,8 @@ describe('generateStory', () => {
       expect(result.storyName).toBe('Customname')
     })
 
-    it('should generate story name from variant prop', () => {
-      const result = generateStory({
+    it('should generate story name from variant prop', async () => {
+      const result = await generateStory({
         meta: baseMeta,
         props: { variant: 'primary' },
       })
@@ -95,8 +95,8 @@ describe('generateStory', () => {
       expect(result.content).toContain('export const Primary: Story')
     })
 
-    it('should generate story name from type prop', () => {
-      const result = generateStory({
+    it('should generate story name from type prop', async () => {
+      const result = await generateStory({
         meta: baseMeta,
         props: { type: 'submit' },
       })
@@ -104,8 +104,8 @@ describe('generateStory', () => {
       expect(result.content).toContain('export const Submit: Story')
     })
 
-    it('should fallback to Default when no meaningful props', () => {
-      const result = generateStory({
+    it('should fallback to Default when no meaningful props', async () => {
+      const result = await generateStory({
         meta: baseMeta,
         props: { someRandomProp: 'value' },
       })
@@ -113,8 +113,8 @@ describe('generateStory', () => {
       expect(result.content).toContain('export const Default: Story')
     })
 
-    it('should convert story name to valid identifier', () => {
-      const result = generateStory({
+    it('should convert story name to valid identifier', async () => {
+      const result = await generateStory({
         meta: baseMeta,
         props: {},
         storyName: 'my cool story!',
@@ -123,8 +123,8 @@ describe('generateStory', () => {
       expect(result.content).toContain('export const MyCoolStory: Story')
     })
 
-    it('should use Default for invalid story names starting with numbers', () => {
-      const result = generateStory({
+    it('should use Default for invalid story names starting with numbers', async () => {
+      const result = await generateStory({
         meta: baseMeta,
         props: {},
         storyName: '#2C2C2C',
@@ -135,8 +135,8 @@ describe('generateStory', () => {
   })
 
   describe('props serialization', () => {
-    it('should handle string props', () => {
-      const result = generateStory({
+    it('should handle string props', async () => {
+      const result = await generateStory({
         meta: baseMeta,
         props: { label: 'Hello World' },
       })
@@ -144,8 +144,8 @@ describe('generateStory', () => {
       expect(result.content).toContain('label: "Hello World"')
     })
 
-    it('should handle number props', () => {
-      const result = generateStory({
+    it('should handle number props', async () => {
+      const result = await generateStory({
         meta: baseMeta,
         props: { count: 42 },
       })
@@ -153,8 +153,8 @@ describe('generateStory', () => {
       expect(result.content).toContain('count: 42')
     })
 
-    it('should handle boolean props', () => {
-      const result = generateStory({
+    it('should handle boolean props', async () => {
+      const result = await generateStory({
         meta: baseMeta,
         props: { disabled: true, loading: false },
       })
@@ -163,8 +163,8 @@ describe('generateStory', () => {
       expect(result.content).toContain('loading: false')
     })
 
-    it('should handle null props', () => {
-      const result = generateStory({
+    it('should handle null props', async () => {
+      const result = await generateStory({
         meta: baseMeta,
         props: { value: null },
       })
@@ -172,8 +172,8 @@ describe('generateStory', () => {
       expect(result.content).toContain('value: null')
     })
 
-    it('should handle object props', () => {
-      const result = generateStory({
+    it('should handle object props', async () => {
+      const result = await generateStory({
         meta: baseMeta,
         props: {
           config: {
@@ -188,8 +188,8 @@ describe('generateStory', () => {
       expect(result.content).toContain('size: "large"')
     })
 
-    it('should handle array props', () => {
-      const result = generateStory({
+    it('should handle array props', async () => {
+      const result = await generateStory({
         meta: baseMeta,
         props: {
           items: ['a', 'b', 'c'],
@@ -202,8 +202,8 @@ describe('generateStory', () => {
       expect(result.content).toContain('"c"')
     })
 
-    it('should handle JSX props', () => {
-      const result = generateStory({
+    it('should handle JSX props', async () => {
+      const result = await generateStory({
         meta: baseMeta,
         props: {
           icon: {
@@ -217,8 +217,8 @@ describe('generateStory', () => {
       expect(result.content).toContain('icon: <Icon name="star" />')
     })
 
-    it('should replace function handlers in JSX with fn()', () => {
-      const result = generateStory({
+    it('should replace function handlers in JSX with fn()', async () => {
+      const result = await generateStory({
         meta: baseMeta,
         props: {
           children: {
@@ -234,8 +234,8 @@ describe('generateStory', () => {
       expect(result.content).toContain("import { fn } from 'storybook/test'")
     })
 
-    it('should handle multiple function handlers in JSX', () => {
-      const result = generateStory({
+    it('should handle multiple function handlers in JSX', async () => {
+      const result = await generateStory({
         meta: baseMeta,
         props: {
           children: {
@@ -252,8 +252,8 @@ describe('generateStory', () => {
       expect(result.content).toContain("import { fn } from 'storybook/test'")
     })
 
-    it('should replace function handlers with template literals in JSX', () => {
-      const result = generateStory({
+    it('should replace function handlers with template literals in JSX', async () => {
+      const result = await generateStory({
         meta: baseMeta,
         props: {
           children: {
@@ -270,8 +270,8 @@ describe('generateStory', () => {
       expect(result.content).toContain("import { fn } from 'storybook/test'")
     })
 
-    it('should handle function props with fn()', () => {
-      const result = generateStory({
+    it('should handle function props with fn()', async () => {
+      const result = await generateStory({
         meta: baseMeta,
         props: {
           onClick: {
@@ -285,8 +285,8 @@ describe('generateStory', () => {
       expect(result.content).toContain("import { fn } from 'storybook/test'")
     })
 
-    it('should handle multiple function props', () => {
-      const result = generateStory({
+    it('should handle multiple function props', async () => {
+      const result = await generateStory({
         meta: baseMeta,
         props: {
           onClick: { __isFunction: true, name: 'onClick' },
@@ -302,8 +302,8 @@ describe('generateStory', () => {
       expect(result.content.match(/import \{ fn \}/g)?.length).toBe(1)
     })
 
-    it('should replace styled component references with div elements', () => {
-      const result = generateStory({
+    it('should replace styled component references with div elements', async () => {
+      const result = await generateStory({
         meta: baseMeta,
         props: {
           children: {
@@ -320,8 +320,8 @@ describe('generateStory', () => {
       )
     })
 
-    it('should replace unknown component references with div elements', () => {
-      const result = generateStory({
+    it('should replace unknown component references with div elements', async () => {
+      const result = await generateStory({
         meta: baseMeta,
         props: {
           children: {
@@ -340,8 +340,8 @@ describe('generateStory', () => {
       )
     })
 
-    it('should keep known component references unchanged', () => {
-      const result = generateStory({
+    it('should keep known component references unchanged', async () => {
+      const result = await generateStory({
         meta: baseMeta,
         props: {
           children: {
@@ -367,8 +367,8 @@ describe('generateStory', () => {
   })
 
   describe('import resolution', () => {
-    it('should add imports for JSX component references', () => {
-      const result = generateStory({
+    it('should add imports for JSX component references', async () => {
+      const result = await generateStory({
         meta: baseMeta,
         props: {
           icon: {
@@ -385,8 +385,8 @@ describe('generateStory', () => {
       expect(result.content).toContain("import { Icon } from './Icon'")
     })
 
-    it('should extract component names from JSX source even if componentRefs is empty', () => {
-      const result = generateStory({
+    it('should extract component names from JSX source even if componentRefs is empty', async () => {
+      const result = await generateStory({
         meta: baseMeta,
         props: {
           children: {
@@ -405,13 +405,13 @@ describe('generateStory', () => {
       expect(result.content).toContain("import { Button } from './Button'")
     })
 
-    it('handles TaskList children built from a mapped list (regression: TaskCard wrongly flagged "not exported")', () => {
+    it('handles TaskList children built from a mapped list (regression: TaskCard wrongly flagged "not exported")', async () => {
       // Repro of the reported bug: <TaskList>{tasks.map(t => <TaskCard/>)}<Button/></TaskList>
       // serializes children whose JSX source contains multiple <TaskCard>.
       // Previously extractComponentRefs skipped nested arrays so componentRefs
       // was ['Button'] only — but even with correct refs, the exported
       // TaskCard must never be replaced with a div / flagged "not exported".
-      const result = generateStory({
+      const result = await generateStory({
         meta: {
           componentName: 'TaskList',
           filePath: '/project/src/components/TaskList.tsx',
@@ -445,8 +445,8 @@ describe('generateStory', () => {
       expect(result.content).not.toContain('data-important-read-this')
     })
 
-    it('should normalize styled-wrapper names in JSX source for imports and output', () => {
-      const result = generateStory({
+    it('should normalize styled-wrapper names in JSX source for imports and output', async () => {
+      const result = await generateStory({
         meta: baseMeta,
         props: {
           children: {
@@ -470,8 +470,8 @@ describe('generateStory', () => {
       )
     })
 
-    it('should handle relative imports from different directories', () => {
-      const result = generateStory({
+    it('should handle relative imports from different directories', async () => {
+      const result = await generateStory({
         meta: {
           ...baseMeta,
           filePath: '/project/src/pages/Home.tsx',
@@ -493,8 +493,8 @@ describe('generateStory', () => {
       )
     })
 
-    it('should not import self-references', () => {
-      const result = generateStory({
+    it('should not import self-references', async () => {
+      const result = await generateStory({
         meta: baseMeta,
         props: {
           child: {
@@ -533,8 +533,8 @@ export const Primary: Story = {
 };
 `
 
-    it('should append a new story to existing file', () => {
-      const result = generateStory({
+    it('should append a new story to existing file', async () => {
+      const result = await generateStory({
         meta: baseMeta,
         props: { label: 'Secondary' },
         storyName: 'Secondary',
@@ -546,8 +546,8 @@ export const Primary: Story = {
       expect(result.content).toContain('label: "Secondary"')
     })
 
-    it('should generate unique story name if already exists', () => {
-      const result = generateStory({
+    it('should generate unique story name if already exists', async () => {
+      const result = await generateStory({
         meta: baseMeta,
         props: { label: 'Another Primary' },
         storyName: 'Primary',
@@ -558,7 +558,7 @@ export const Primary: Story = {
       expect(result.content).toContain('export const Primary2: Story')
     })
 
-    it('should increment suffix for multiple duplicates', () => {
+    it('should increment suffix for multiple duplicates', async () => {
       const contentWithTwoStories =
         existingContent +
         `
@@ -568,7 +568,7 @@ export const Primary2: Story = {
   },
 };
 `
-      const result = generateStory({
+      const result = await generateStory({
         meta: baseMeta,
         props: { label: 'Another' },
         storyName: 'Primary',
@@ -578,8 +578,8 @@ export const Primary2: Story = {
       expect(result.content).toContain('export const Primary3: Story')
     })
 
-    it('should add fn import when appending story with function props', () => {
-      const result = generateStory({
+    it('should add fn import when appending story with function props', async () => {
+      const result = await generateStory({
         meta: baseMeta,
         props: {
           onClick: { __isFunction: true, name: 'onClick' },
@@ -592,7 +592,7 @@ export const Primary2: Story = {
       expect(result.content).toContain('onClick: fn()')
     })
 
-    it('should not duplicate fn import if already exists', () => {
+    it('should not duplicate fn import if already exists', async () => {
       const contentWithFn = `import React from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { fn } from 'storybook/test';
@@ -611,7 +611,7 @@ export const Primary: Story = {
   },
 };
 `
-      const result = generateStory({
+      const result = await generateStory({
         meta: baseMeta,
         props: {
           onClick: { __isFunction: true, name: 'onClick' },
@@ -629,8 +629,8 @@ export const Primary: Story = {
   })
 
   describe('special serialized values', () => {
-    it('emits Date props as new Date("ISO") (regression: was {})', () => {
-      const result = generateStory({
+    it('emits Date props as new Date("ISO") (regression: was {})', async () => {
+      const result = await generateStory({
         meta: baseMeta,
         props: {
           createdAt: { __isDate: true, iso: '2026-01-01T00:00:00.000Z' },
@@ -649,8 +649,8 @@ export const Primary: Story = {
       expect(result.content).not.toContain('createdAt: {}')
     })
 
-    it('emits a placeholder for non-plain object markers (Map/Set/class)', () => {
-      const result = generateStory({
+    it('emits a placeholder for non-plain object markers (Map/Set/class)', async () => {
+      const result = await generateStory({
         meta: baseMeta,
         props: {
           lookup: { __isObject: true, name: 'Map' },
@@ -663,11 +663,11 @@ export const Primary: Story = {
       expect(result.content).toContain('Map')
     })
 
-    it('does not emit ref/key as args (sanitized at the runtime serializer)', () => {
+    it('does not emit ref/key as args (sanitized at the runtime serializer)', async () => {
       // The runtime serializer strips `ref`/`key`; if they ever reach the
       // generator they must not produce broken args. Here they simply are
       // absent from serialized props (the documented contract).
-      const result = generateStory({
+      const result = await generateStory({
         meta: baseMeta,
         props: { label: 'Field', placeholder: 'x' },
       })
@@ -678,8 +678,8 @@ export const Primary: Story = {
   })
 
   describe('file path generation', () => {
-    it('should generate correct story file path', () => {
-      const result = generateStory({
+    it('should generate correct story file path', async () => {
+      const result = await generateStory({
         meta: baseMeta,
         props: {},
       })
@@ -690,47 +690,47 @@ export const Primary: Story = {
 })
 
 describe('generateStoryName', () => {
-  it('should use variant prop', () => {
+  it('should use variant prop', async () => {
     expect(generateStoryName({ variant: 'primary' })).toBe('Primary')
   })
 
-  it('should use type prop', () => {
+  it('should use type prop', async () => {
     expect(generateStoryName({ type: 'submit' })).toBe('Submit')
   })
 
-  it('should use size prop', () => {
+  it('should use size prop', async () => {
     expect(generateStoryName({ size: 'large' })).toBe('Large')
   })
 
-  it('should use mode prop', () => {
+  it('should use mode prop', async () => {
     expect(generateStoryName({ mode: 'dark' })).toBe('Dark')
   })
 
-  it('should use status prop', () => {
+  it('should use status prop', async () => {
     expect(generateStoryName({ status: 'error' })).toBe('Error')
   })
 
-  it('should use kind prop', () => {
+  it('should use kind prop', async () => {
     expect(generateStoryName({ kind: 'ghost' })).toBe('Ghost')
   })
 
-  it('should prioritize variant over other props', () => {
+  it('should prioritize variant over other props', async () => {
     expect(generateStoryName({ variant: 'primary', type: 'submit' })).toBe(
       'Primary',
     )
   })
 
-  it('should return Default for empty props', () => {
+  it('should return Default for empty props', async () => {
     expect(generateStoryName({})).toBe('Default')
   })
 
-  it('should return Default for non-meaningful props', () => {
+  it('should return Default for non-meaningful props', async () => {
     expect(generateStoryName({ children: 'text', className: 'btn' })).toBe(
       'Default',
     )
   })
 
-  it('should handle invalid prop values that result in invalid identifiers', () => {
+  it('should handle invalid prop values that result in invalid identifiers', async () => {
     // This would generate an invalid name, but generateStoryName only looks for specific props
     // The invalid name handling is tested in the story generation tests above
     expect(generateStoryName({ variant: '123invalid' })).toBe('123invalid')

@@ -7,6 +7,8 @@
  * fallback. Pure functions — callers fetch/cache the index themselves.
  */
 
+import { storyNameFromExport } from 'storybook/internal/csf/csf-utils'
+
 export interface StoryIndexEntryLike {
   id: string
   title?: string
@@ -28,16 +30,6 @@ export function stripExtForMatch(p: string): string {
   return p
     .replace(/^\.\//, '')
     .replace(/\.(stories\.)?(tsx?|jsx?|mts|mjs|vue)$/, '')
-}
-
-/**
- * Normalise a story name for loose comparison: lower-case and strip spaces.
- * Storybook derives display names from export names by inserting spaces
- * (e.g. export `FilledForm` → name `"Filled Form"`), so we normalise both
- * sides before comparing.
- */
-export function normaliseStoryName(name: string): string {
-  return name.toLowerCase().replace(/\s+/g, '')
 }
 
 /**
@@ -98,8 +90,9 @@ export function findStoryCandidates(
 /**
  * Pick the story id to navigate to for a component file.
  *
- * When `preferredStoryName` is supplied (a story that was just created), a
- * story whose name matches (normalised) wins. Otherwise:
+ * When `preferredStoryName` is supplied (the export name of a story that was
+ * just created), the story whose derived display name or export name matches
+ * wins. Otherwise:
  * - with `requirePreferred: true`, returns `null` — the caller is polling a
  *   possibly-stale index for the new story and must NOT fall back to an
  *   older story of the same component (that navigates to the wrong story);
@@ -115,14 +108,15 @@ export function pickStoryId(
   if (candidates.length === 0) return null
 
   if (preferredStoryName) {
-    // Compare against both the display name and the export name — Storybook
-    // re-derives them from the written export (e.g. our `FilledForm` becomes
-    // name/exportName `Filledform`), so only the normalised forms line up.
-    const needle = normaliseStoryName(preferredStoryName)
+    // `preferredStoryName` is the export identifier we just wrote (e.g.
+    // `FilledForm`). Storybook's index derives the display `name` from it via
+    // `storyNameFromExport` (inserting spaces before capital/digit runs), so
+    // compare against that exact derivation — and also against `exportName`
+    // directly, which still lines up even when a CSF `name`/`storyName`
+    // annotation overrides the derived display name.
+    const expectedName = storyNameFromExport(preferredStoryName)
     const match = candidates.find(
-      (e) =>
-        normaliseStoryName(e.name || '') === needle ||
-        normaliseStoryName(e.exportName || '') === needle,
+      (e) => e.name === expectedName || e.exportName === preferredStoryName,
     )
     if (match) return match.id
     if (opts.requirePreferred) return null

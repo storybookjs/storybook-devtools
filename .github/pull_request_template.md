@@ -17,8 +17,12 @@
 
 ```bash
 # Baseline
-pnpm test
+pnpm build
+pnpm test --run
+pnpm typecheck
 pnpm exec playwright test
+# For Storybook peer, indexing, generation, or launcher changes:
+pnpm exec playwright test --config=playwright.storybook.config.ts
 ```
 
 ## Screenshots / Evidence
