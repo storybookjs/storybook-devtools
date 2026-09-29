@@ -259,10 +259,14 @@ export function createComponentHighlighterPlugin(
       // triggering a mid-session re-optimization + full page reload in every
       // consuming app. Pre-declare them so they are bundled at server startup.
       viteConfig.optimizeDeps.include.push(
-        'xstate',
-        'nanoevents',
-        '@medv/finder',
-        'dom-accessibility-api',
+        '@storybook/experimental-devtools > xstate',
+        '@storybook/experimental-devtools > nanoevents',
+        '@storybook/experimental-devtools > @medv/finder',
+        '@storybook/experimental-devtools > dom-accessibility-api',
+        // Imported by the client through `utils/story-matching`. `storybook`
+        // is the consumer's own peer dependency, so the bare specifier
+        // resolves from the app root.
+        'storybook/internal/csf/csf-utils',
       )
 
       if (framework.name === 'react') {
@@ -437,6 +441,12 @@ export function createComponentHighlighterPlugin(
 
   return [
     transformPlugin,
-    createPluginFromDevframe(definition, { setup: kitSetup }),
+    // Vite's Messages plugin already provides the open service. In devframe
+    // 1.1.0, sequential ctx.install() calls after services.ready() can race
+    // their asynchronous service imports and register the same RPC twice
+    // (DF0021). Reuse the host service; without Vite's built-ins, clients
+    // already fall back to Vite's /__open-in-editor endpoint. Other hosts
+    // collect the definition's service before their shared ready barrier.
+    createPluginFromDevframe({ ...definition, services: [] }, { setup: kitSetup }),
   ]
 }

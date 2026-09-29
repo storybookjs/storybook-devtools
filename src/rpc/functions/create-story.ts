@@ -6,6 +6,7 @@ import type { SerializedRegistryInstance } from '../../shared-types'
 import { getStorybookDevframeContext } from '../../context'
 import { ordinal } from '../../utils/instance-selection'
 import { formatStoryFile } from '../../utils/csf-writer'
+import { resolveStoryFormat, type StoryFormat } from '../../utils/csf-format'
 
 // Generating/formatting is async. Serialize read-modify-write per output
 // file so two save actions cannot overwrite each other's exports.
@@ -47,6 +48,8 @@ export interface ComponentStoryData {
   playImports?: string[]
   /** When true, skip navigating to the story after creation (e.g. batch "Create all") */
   skipNavigation?: boolean
+  /** Batch callers emit one summary instead of per-story notifications. */
+  suppressNotification?: boolean
   /**
    * Which live instance these props came from, among the component's
    * connected siblings — set by the caller when more than one instance is
@@ -142,6 +145,18 @@ export const createStory = defineRpcFunction({
               logDebug(`Appending to existing story file: ${outputPath}`)
             }
 
+            // A new file follows the project's story format; an existing one
+            // keeps its own, which the writer detects.
+            let storyFormat: StoryFormat | undefined
+            if (existingContent === undefined) {
+              const project = await storyIndexService.project
+              storyFormat = await resolveStoryFormat({
+                configDir: project?.configDir,
+                renderer: project?.renderer,
+                storyFilePath: outputPath,
+              })
+            }
+
             // Dynamically import the framework-specific story generator
             let generateStory: typeof import('../../frameworks/react/story-generator').generateStory
 
@@ -170,6 +185,7 @@ export const createStory = defineRpcFunction({
               props: data.serializedProps,
               componentRegistry: registryMap,
               storybookFramework: await storybookFramework,
+              ...(storyFormat ? { storyFormat } : {}),
               ...(data.storyName ? { storyName: data.storyName } : {}),
               ...(existingContent ? { existingContent } : {}),
               ...(data.playFunction
@@ -215,7 +231,7 @@ export const createStory = defineRpcFunction({
               data.sourceInstance && data.sourceInstance.total > 1
                 ? ` (from the ${ordinal(data.sourceInstance.index)} of ${data.sourceInstance.total} instances)`
                 : ''
-            state.notifications.notify({
+            if (!data.suppressNotification) state.notifications.notify({
               message: `Story "${story.storyName}" ${verb} ${path.basename(outputPath)}${sourceNote}`,
               level: 'success',
               toast: true,
@@ -243,9 +259,9 @@ export const createStory = defineRpcFunction({
               optional: true,
             })
 
-            // Coverage dashboard auto-refreshes via client-side RPC polling
+            return { success: true }
           } catch (error) {
-            state.notifications.notify({
+            if (!data.suppressNotification) state.notifications.notify({
               message: `Failed to create story for ${data.meta.componentName}`,
               level: 'error',
               toast: true,
@@ -272,6 +288,7 @@ export const createStory = defineRpcFunction({
             releaseWrite?.()
           }
         }
+        return { success: false }
       },
     }
   },

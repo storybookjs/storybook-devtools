@@ -41,12 +41,12 @@ export function registerSsrSuite(
       expect(html).toContain(markerText)
     })
 
-    test('hydrates without mismatch errors and registers the component', async ({
+    test('hydrates without mismatch or highlighter errors and registers the component', async ({
       page,
     }) => {
       const hydrationErrors: string[] = []
       const isHydrationError = (text: string) =>
-        /hydrat|did not match|mismatch/i.test(text)
+        /hydrat|did not match|mismatch|component-highlighter/i.test(text)
       page.on('console', (msg) => {
         if (msg.type() === 'error' && isHydrationError(msg.text())) {
           hydrationErrors.push(msg.text())

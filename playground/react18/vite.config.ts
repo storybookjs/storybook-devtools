@@ -3,7 +3,6 @@
 import { fileURLToPath } from 'node:url'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
-import { DevTools } from '@vitejs/devtools'
 
 import componentHighlighter from '../../src/frameworks/react/plugin'
 
@@ -15,13 +14,20 @@ const r = (filepath: string) =>
 // (same components/App) but pinned to React 18.
 export default defineConfig({
   devtools: {
+    // Unconditional is safe here: this playground has no `.storybook`
+    // config, so Storybook's Vite builder never loads this file and can
+    // never double-mount the DevTools hub the way it can for the other
+    // playgrounds.
     enabled: true,
     clientAuth: false,
   },
+  // `devtools.enabled` above is enough — Vite mounts `@vitejs/devtools`
+  // itself for the dev server; a manual `DevTools()` plugin here would
+  // register it twice (DTK0034).
   plugins: [
     react(),
-    DevTools(),
     componentHighlighter({
+      storybookUrl: process.env.STORYBOOK_E2E_URL || 'http://localhost:6006',
       debugMode: true,
     }),
   ],

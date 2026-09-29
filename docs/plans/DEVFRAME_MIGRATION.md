@@ -1,5 +1,9 @@
 # Devframe Migration — Feasibility Report & Phased Plan
 
+> Historical design notes. Version references and proposed work describe the
+> original investigation; see [Architecture](../ARCHITECTURE.md) and
+> [Supported frameworks](../SUPPORTED_FRAMEWORKS.md) for current behavior.
+
 Status: **Phases 1–4 implemented** (Vite family: React 19 / React 18 / Vue
 green on devframe 0.9 / devtools-kit 0.6; core re-platformed onto `unplugin`
 with zero behavior change; Rsbuild and Next.js hosts mounted on that core —

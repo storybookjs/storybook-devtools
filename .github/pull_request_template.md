@@ -10,6 +10,7 @@
 
 - [ ] Supported framework impact considered (see `docs/SUPPORTED_FRAMEWORKS.md`)
 - [ ] Shared e2e helpers/suite reused where possible
+- [ ] First-click dock activation checked through the real UI for lifecycle changes
 
 ## Validation
 

@@ -4,7 +4,6 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import vue from '@vitejs/plugin-vue'
 import { defineConfig } from 'vite'
-import { DevTools } from '@vitejs/devtools'
 import { storybookTest } from '@storybook/addon-vitest/vitest-plugin'
 import { playwright } from '@vitest/browser-playwright'
 
@@ -13,22 +12,25 @@ import componentHighlighter from '../../src/frameworks/vue/plugin'
 const r = (filepath: string) =>
   fileURLToPath(new URL(filepath, import.meta.url))
 
-const dirname =
-  typeof __dirname !== 'undefined'
-    ? __dirname
-    : path.dirname(fileURLToPath(import.meta.url))
+const dirname = import.meta.dirname
 
 export default defineConfig({
   devtools: {
-    enabled: true,
+    // Storybook's own Vite builder loads this same config with
+    // `STORYBOOK=true` set; mounting Vite's native DevTools hub there too
+    // would put a second, unrelated devframe hub on a `977x` sidecar port.
+    enabled: !process.env.STORYBOOK,
     clientAuth: false,
   },
+  // `devtools.enabled` above is enough when not under Storybook — Vite
+  // mounts `@vitejs/devtools` itself for the dev server; a manual
+  // `DevTools()` plugin here would register it twice (DTK0034).
   plugins: [
     vue(),
-    process.env.STORYBOOK ? null : DevTools(),
     process.env.STORYBOOK
       ? null
       : componentHighlighter({
+          storybookUrl: process.env.STORYBOOK_E2E_URL || 'http://localhost:6006',
           debugMode: false,
         }),
   ].filter(Boolean),
@@ -64,7 +66,6 @@ export default defineConfig({
           },
         ],
       },
-      setupFiles: ['.storybook/vitest.setup.ts'],
     },
   },
 })

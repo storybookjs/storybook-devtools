@@ -18,6 +18,7 @@ import { DevToolsNotificationService } from './notifications'
 import { collectCoverage } from './coverage-dashboard'
 import { getStorybookDevframeContext, type CreateStorybookDevframeDeps } from './context'
 import type { ChDiagnostics } from './unplugin'
+import type { ComponentStoryData } from './rpc/functions/create-story'
 import type { SerializedRegistryInstance } from './shared-types'
 import { getStorybookDocsUrl } from './utils/storybook-docs-url'
 
@@ -172,7 +173,7 @@ export function registerStorybookHubSurfaces(
         const registryStore = await ctx.rpc.sharedState.get(
           'component-highlighter:registry',
         )
-        let storiesCreated = 0
+        const stories: ComponentStoryData[] = []
         for (const entry of uncovered) {
           // Find a matching instance in the registry
           const allInstances = registryStore.value()
@@ -192,30 +193,14 @@ export function registerStorybookHubSurfaces(
             if (seen.has(fp)) continue
             seen.add(fp)
 
-            // Invoke the create-story handler directly
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            await (ctx.rpc.invokeLocal as any)(
-              'component-highlighter:create-story',
-              {
-                meta: inst.meta,
-                serializedProps: inst.serializedProps,
-                skipNavigation: true,
-              },
-            )
-            storiesCreated++
+            stories.push({
+              meta: inst.meta,
+              ...(inst.serializedProps !== undefined ? { serializedProps: inst.serializedProps } : {}),
+            })
           }
         }
 
-        state.notifications.notify({
-          message:
-            storiesCreated > 0
-              ? `Created stories for ${storiesCreated} component${storiesCreated === 1 ? '' : 's'}`
-              : 'No visible uncovered components found — navigate to a page with components first',
-          level: storiesCreated > 0 ? 'success' : 'info',
-          toast: true,
-          autoDismissMs: 4000,
-          category: 'story-creation',
-        })
+        await ctx.rpc.invokeLocal('component-highlighter:create-stories', stories)
 
         // Open the coverage tab so the user can see the updated results
         openPanelTab('coverage')

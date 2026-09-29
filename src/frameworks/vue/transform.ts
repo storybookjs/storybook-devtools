@@ -4,11 +4,10 @@
  * Vue components are detected at runtime via the Vue DevTools global hook
  * (see src/frameworks/vue/devtools-hook.ts + runtime-module.ts), using Vue's
  * native `instance.type.__file` / `__name` for source identity. This transform
- * therefore does NOT reconstruct the SFC or inject any per-component tracking
- * code. It performs exactly one minimal, idempotent edit: it prepends a
- * side-effect `import 'virtual:component-highlighter/vue-runtime'` to the SFC's
- * existing `<script setup>` (or `<script>`) block so the runtime module is
- * pulled into the page's module graph. Nothing else in the SFC is touched —
+ * does not reconstruct the SFC or wrap components. It prepends a runtime
+ * import and source registration to the existing `<script setup>` (or
+ * `<script>`) block. The runtime accepts only registered source paths, so
+ * dependency-owned DevTools components cannot pollute the app registry. Nothing else in the SFC is touched —
  * the original script body, template, styles, and custom blocks are preserved
  * byte-for-byte. All script blocks are preserved, including non-`setup`
  * `<script>` blocks.
@@ -27,14 +26,14 @@ import type { TransformFunction } from '../types'
 export const VIRTUAL_MODULE_ID = 'virtual:component-highlighter/vue-runtime'
 
 /**
- * The side-effect import that loads the Vue runtime module. Idempotent: we skip
+ * The named import that loads the Vue runtime and registers accepted sources. Idempotent: we skip
  * the edit if it is already present (avoids double-insertion on re-transform).
  */
-const RUNTIME_IMPORT = `import '${VIRTUAL_MODULE_ID}';`
+const RUNTIME_IMPORT = `import { registerComponentSource as __chRegisterSource } from '${VIRTUAL_MODULE_ID}';`
 
 /**
- * Transform Vue SFC files: prepend a single side-effect import of the runtime
- * module to the script block. No SFC reconstruction.
+ * Transform Vue SFC files: prepend a runtime import and source registration
+ * to the script block. No SFC reconstruction.
  */
 export const transform: TransformFunction = (
   code: string,
@@ -60,8 +59,9 @@ export const transform: TransformFunction = (
     }
 
     const insertAt = scriptBlock.loc.start.offset
+    const sourceRegistration = `${RUNTIME_IMPORT}__chRegisterSource(${JSON.stringify(id.replace(/\\/g, '/'))});`
     const transformed =
-      code.slice(0, insertAt) + RUNTIME_IMPORT + code.slice(insertAt)
+      code.slice(0, insertAt) + sourceRegistration + code.slice(insertAt)
 
     return transformed
   } catch (error) {

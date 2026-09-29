@@ -75,10 +75,10 @@ wraps components.
   `__chRegisterMeta(Component, { componentName, filePath,
   relativeFilePath, sourceId, isDefaultExport })`. The fiber tree is
   untouched.
-- **Vue**: prepends one side-effect import,
-  `import 'virtual:component-highlighter/vue-runtime'`, to the
-  `<script setup>`/`<script>` block. Everything else is preserved
-  byte-for-byte. Source identity is read at runtime from Vue's own
+- **Vue**: prepends a runtime import and `registerComponentSource(filePath)`
+  call to the `<script setup>`/`<script>` block. Everything else is preserved
+  byte-for-byte. The runtime accepts only these source paths, respecting the
+  transform's include/exclude filter. Source identity is read from Vue's own
   `instance.type.__file`/`__name`.
 
 Both report non-fatal detection gaps through `TransformOptions.onIssue`,
@@ -127,15 +127,102 @@ runtime replay above. It renders highlight rectangles in
 and drives the Shadow DOM context menu. `src/client/interaction-recorder.ts`
 captures user actions as play-function steps for "Create with Interactions".
 
+`vite-devtools.ts` handles the action dock's lifecycle. The hub selects an
+action before importing its client script, so setup checks `current.isActive`
+to recover the first activation and binds events once per dock state. RPC
+receivers initialize immediately when a host context is available, before
+the activation broadcast; delayed host startup still uses the retry loop.
+
+The portable devframe declares `@devframes/service-open`, including the
+repository root for symlinked source trees. The Vite adapter omits that
+declaration and reuses the service supplied by the host's Messages plugin
+(whose workspace root covers workspace packages), falling back to Vite's
+editor endpoint when unavailable. Devframe 1.1.0 can race late service
+installations after `services.ready()`, producing duplicate RPCs (`DF0021`).
+Rsbuild/Next collect their service declarations before the shared barrier.
+Navigation and story-created client RPC handlers are registered once per RPC
+client, so repeated action execution does not emit duplicate-registration
+warnings and a replacement connection gets its own handlers.
+
+When serving runtime source through a virtual module, `transformRequest`
+has already rewritten its imports. `normalizeRuntimeImports` restores helper
+virtual IDs and removes the public base from `/@fs/` imports before Vite's
+second import-analysis pass. This matters for Nuxt's `/_nuxt/` base; leaving
+that browser URL prefix in the module specifier prevents source resolution.
+The Nuxt 4.5 playground uses Vite's native `devtools.enabled` option rather
+than adding another explicit `DevTools()` plugin.
+Vue prop serialization uses `frameworks/vue/serialize-value.ts` to bound
+object/array traversal at six levels and replace circular references with
+`[Circular]`, matching React's bounded-serialization approach. Shared objects
+in separate branches remain serializable. SSR tests reject highlighter
+console errors as well as hydration mismatches.
+The Vue hook only accepts SFCs registered by the transform. This also keeps
+Nuxt DevTools' precompiled internal components out of the registry, even when
+their embedded `__file` paths do not contain `node_modules`, and prevents
+them from postponing app sync.
+
 ### 5. DevTools panel
 
 `src/panel/panel.ts` is served as the devframe's `clientAssets` SPA at
-`/__storybook-devtools/`. Four tabs: Storybook (embedded iframe), Coverage
-(dashboard, bulk "Create all"), Terminal (process output), Docs. Story
+`/__storybook-devtools/`. Four tabs: Storybook (embedded iframe), Component Highlighter, Coverage
+(dashboard, bulk "Generate all"), and About (documentation and GitHub links).
+The rail uses a monochrome Storybook icon; the About page retains the full logo.
+The highlighter header labels its editor action "Open component in editor";
+its menu only includes the separate story-editor action when available. Story
 navigation uses the Storybook channel API
 (`__STORYBOOK_ADDONS_CHANNEL__.emit('setCurrentStory')`).
 
+Coverage renders a searchable list of currently connected components, grouped
+by story existence. A row's name opens Properties; its primary action creates
+stories or opens Stories. Secondary actions are in the row menu. Search state
+survives coverage refreshes. Generate all has a panel-wide in-flight guard.
+
+The Component Highlighter detail pane uses peer Properties, Stories, and Docs
+tabs (`buildDetailTabs`) with ARIA tab/panel relationships and roving keyboard
+focus. Properties is the default for a new component instance; Stories contains
+creation and live previews. Docs is omitted unless the index has a matching
+entry. Selecting Docs lazily creates one iframe
+(`<storybookUrl>/iframe.html?viewMode=docs&id=<docsEntryId>`). Tabs hide/show their
+panes without recreating them. Refreshing props for the same instance preserves
+the active tab, draft name, and loaded docs/story frames; a changed story index
+or Storybook running state rebuilds the panes. A build version discards stale
+async renders after a newer selection. `findDocsEntry`
+(`src/utils/story-matching.ts`) decides which entry belongs to the component:
+an `autodocs`-tagged entry (Storybook synthesises it from the stories file,
+so it shares that file's `importPath`/`title`) or an `attached-mdx` entry
+(an `.mdx` file using `<Meta of={ComponentStories} />`, matched through its
+`storiesImports`); `unattached-mdx` entries never match. When both exist,
+the attached MDX entry wins. This runs against the full `storybook-index`
+RPC payload (`src/rpc/functions/storybook-index.ts`, a raw proxy of
+Storybook's own `/index.json`, docs entries included) — unlike
+`src/story-index.ts`'s server-side generator, which coverage and
+`check-story` read and which only ever produces/consumes `type: 'story'`
+entries, so docs entries never reach coverage's `hasStory` decision, the
+story-creation/append path, or "visit story" navigation.
+
+`src/client/notification-styles.ts` adapts the existing hub toasts inside the
+embedded/standalone dock shadow root to Storybook’s inverse notification
+surface, typography, spacing and dismiss button. The hub still owns message
+history, dismissal, timing and actions. This adapter targets hub-ui 1.x
+`.z-dock-toast` / `.bg-toast-glass` markup; the shared panel browser suite
+checks real light/dark toasts to detect upstream changes. Rsbuild and Next
+explicitly mount `@devframes/plugin-messages` to expose the message-feed
+RPCs consumed by the hub toast overlay; Vite mounts it automatically.
+
+Interactive overlay colors reflect story existence: blue without stories,
+pink with stories, dashed for siblings. The name pill aligns with the
+component’s left edge, with the Storybook badge outside it where space
+permits; near the viewport edge the badge stays inside the row.
+
 ### 6. Story generation (server)
+
+The `create-stories` RPC handles bulk requests from Coverage and the command
+palette. It calls `create-story` sequentially with `skipNavigation` and
+`suppressNotification`, then emits one summary including failed writes.
+`create-story` returns `{ success: boolean }`; disabled writes and missing
+serialized props count as failures, not successful creations. Single saves
+retain their individual notifications. File invalidation and story-created
+broadcasts still happen for each write.
 
 `src/frameworks/<fw>/story-generator.ts` receives a payload over RPC,
 generates framework-specific story source (React `.stories.tsx`, Vue
@@ -167,10 +254,39 @@ Concurrent saves to the same output file are queued around the complete
 read/generate/format/write operation, preventing lost exports.
 
 Each generator computes the story's required imports
-(`collectRequiredImports`) and the rendered `export const … : Story = {…}`
-block (`renderStoryExport`) once, then either hands both to
-`writeStoryIntoCsf` (the file exists) or prints them into the new-file
-template (it doesn't) — the two paths share one definition of both.
+(`collectRequiredImports`) and the story's object literal once, then either
+hands both to `writeStoryIntoCsf` (the file exists) or prints them into the
+new-file template (it doesn't). `renderStoryExport` in
+`src/utils/story-generator.ts` is the one definition of the export around
+the object, for both paths.
+
+**Story format.** Two formats are written: CSF3 (`export const X: Story =
+{…}`) and CSF factories (`export const X = meta.story({…})`, no
+`Meta`/`StoryObj` imports). A new file follows the project:
+`src/utils/csf-format.ts` (`resolveStoryFormat`) reports a factory project
+when `.storybook/preview` imports `definePreview` from a storybook package —
+Storybook's own `isCsfFactoryPreview(loadConfig(...))`, loaded lazily —
+and the renderer is React or Vue; a missing config directory, missing
+preview file, unparseable preview or other renderer means CSF3, never an
+error. The preview import specifier follows Storybook's new-story flow:
+`#.storybook/preview` when a `package.json` from the config directory up to
+the project root declares `imports`, else the relative path without
+extension (always `./`- or `../`-prefixed, unlike Storybook's own, which
+yields a bare `.storybook/preview` for a story next to the config dir). It
+must end in `/preview`, which `CsfFile` requires to accept
+`preview.meta(...)`. An *append* ignores the project's preview and follows
+the file (`detectExportStyle` in `csf-writer.ts`): `CsfFile._metaIsFactory`
+/ `_metaVariableName` give `<metaVar>.story({…})`; a CSF3 file reuses its
+first story's `: Type` annotation or `satisfies` clause, else the `Story`
+alias if the file declares one, else no annotation. Mixing formats makes
+`CsfFile` throw `MixedFactoryError`, so the text fallback also detects a
+factory file (`const x = preview.meta(`) and never emits CSF3 into it.
+
+**Line endings.** The writer detects the existing file's line ending (CRLF
+when most breaks are CRLF, else LF), passes it to `printCsf` as
+`lineTerminator` and normalises the result. `printCsf` defaults to `os.EOL`
+on Storybook 10 and always LF on 11, so relying on either default would
+change endings on one of them.
 
 **Fallback rule.** `writeStoryIntoCsf` returns `{ code, exportName,
 fallbackReason? }`. When `loadCsf` throws — a story file with
@@ -245,6 +361,16 @@ file is a story file" lives in `src/utils/story-files.ts` and is shared with
 `src/unplugin.ts`'s instrumentation `exclude` globs and `watchChange`
 filter.
 
+Index entries with `subtype: 'test'` (component tests, present in Storybook
+10.6 and 11) are not stories: Storybook nests them under their `parent`
+story in the sidebar and leaves them out of component entry selection, so
+`findStoryCandidates` skips them. That keeps them out of `hasStory`, story
+counts, story cards and "visit story"; entries without a `subtype` (older
+indexes, the file-scan fallback) count as stories. The local CSF indexer
+returns no entries for an empty or whitespace-only story file, as
+Storybook's own indexer does, instead of letting `loadCsf` reject it and
+fail the whole index.
+
 `StoryIndexGenerator.getIndex()` throws a `MultipleIndexingError` covering
 every file that failed to parse, not a partial index with those entries
 dropped, so one bad CSF file takes down the whole generated index for that
@@ -297,7 +423,8 @@ natively loaded csf-tools makes every append fall back to the text splice.
 **Peer dependency loading.** `storybook` is a required peer. Node-side
 code reaches `storybook/internal/*` through `src/storybook-peer.ts`
 (`loadStorybookInternal`, a memoised `createRequire` load behind a version
-check against the `peerDependencies` floor) or through a lazy `import()`,
+check against the `peerDependencies` floor, `>=10.6.0 || ^11.0.0-0`; the
+check compares prereleases per semver) or through a lazy `import()`,
 never through a static import in a host entry: ES module linking resolves
 every static import before any body runs, so a missing or too-old
 `storybook` would otherwise surface as a bare resolution error naming an
@@ -353,6 +480,7 @@ function, one file per function under `src/rpc/functions/`, collected by
 | `reset-prop` | action | Panel resets a prop to its original value |
 | `select-component` | action | Client/overlay selects a component in the panel |
 | `visit-story` | action | Tell the panel to navigate to a story |
+| `create-stories` | action | Bulk creation with one summary notification and a `story-created` broadcast per write |
 | `notify` | action | Show a toast notification via DevTools logs |
 | `highlight-target` | action | Debug-log the current highlight target |
 | `toggle-overlay` | action | Debug-log an overlay toggle |
@@ -368,7 +496,13 @@ host has the same dock. `storybook-status` reports
 is false (a custom hub without the dock). The launch command is built by
 `storybook-launch.ts`, which detects the project's package manager via
 `storybook/internal/common`'s `JsPackageManagerFactory` and falls back to
-`npx` when detection fails. The child inherits the host dev server's env
+`npx` when detection fails; the command is `storybook dev -p <port>` with no
+browser flag. Storybook 10.6 and 11.0.0-alpha.1 open a browser by default
+and later 11 builds only with `--open`, while `--no-open` is an unknown
+option on the latter, so the child's env sets `BROWSER=none` instead — the
+launcher honours it in every version (`openBrowser` returns without opening) — and
+`--ci` is avoided because it also disables the prompts below. The child
+inherits the host dev server's env
 with `STORYBOOK=true` set and `PORT` pinned to Storybook's port: Storybook's
 CLI lets `PORT` override `-p`, and Next's dev server exports its own port
 under that name, so an inherited value would bind Storybook to the app's
@@ -378,8 +512,19 @@ session stays registered for its scrollback; the next start respawns it.
 
 Open-in-editor goes through the `@devframes/service-open` wire service,
 registered on every host as `devframes:service:open:open-in-editor`. The
-panel and overlay feature-detect it and fall back to Vite's
-`/__open-in-editor` endpoint when unavailable.
+panel and overlay feature-detect it (`hasOpenService()` in
+`src/client/overlay.ts`, checking the synced `devframes:services` shared
+state) and fall back to Vite's `/__open-in-editor` endpoint only when no
+install of the service has advertised itself at all.
+
+On the Vite host, `@vitejs/devtools` mounts `@devframes/plugin-messages`,
+which declares the same wire service and installs it before this plugin's
+devframe mounts. The two mounts do not share a service registry, so this
+plugin's install registers the same RPC function a second time; devframe
+rejects it with a non-fatal `DF0021` diagnostic and keeps the first
+registration. On that host the service therefore runs with
+`plugin-messages`' options, not this plugin's `roots`. Rsbuild and Next own
+their hub, so this plugin's installation is the only one there.
 
 ## Key modules (where to edit)
 
@@ -399,7 +544,7 @@ panel and overlay feature-detect it and fall back to Vite's
 | `src/rpc/index.ts` | `serverFunctions` barrel and RPC/shared-state type augmentation |
 | `src/context.ts` | Maps a devframe context to the deps it was created with |
 | `src/devframe-export.ts` | `./devframe` entry for mounting the definition in a custom DevTools host |
-| `src/frameworks/<fw>/transform.ts` | Build-time tagging (React metadata call; Vue runtime import) |
+| `src/frameworks/<fw>/transform.ts` | Build-time tagging (React metadata call; Vue runtime import and source registration) |
 | `src/frameworks/react/devtools-hook.ts` | Inline script installing the React DevTools global hook |
 | `src/frameworks/vue/devtools-hook.ts` | Inline script installing the Vue DevTools global hook |
 | `src/frameworks/nuxt/plugin.ts` | Nuxt entry: SSR head-script helpers and the dev-server bridge module |
@@ -421,9 +566,10 @@ panel and overlay feature-detect it and fall back to Vite's
 | `src/client/utils/prop-utils.ts` | Prop classification, editability, badge utilities |
 | `src/client/utils/prop-editor.ts` | Shared inline prop editor form builder |
 | `src/panel/panel.ts` | DevTools panel tabs |
-| `src/utils/story-matching.ts` | Story-to-component matching against Storybook's `index.json`, and visit-target selection |
+| `src/utils/story-matching.ts` | Story-to-component matching against Storybook's `index.json`, visit-target selection, and docs-entry matching (`findDocsEntry`) |
 | `src/utils/instance-selection.ts` | Props fingerprinting and picking one live instance per variant for story creation, preferring an instance with live edits || `src/utils/story-generator.ts` | Shared story generation utilities (naming, args formatting) |
-| `src/utils/csf-writer.ts` | CSF-AST append/dedupe/import-merge for existing story files, with a regex-splice fallback, plus prettier formatting |
+| `src/utils/csf-writer.ts` | CSF-AST append/dedupe/import-merge for existing story files in the file's own format (CSF3 or factory) and line endings, with a regex-splice fallback, plus prettier formatting |
+| `src/utils/csf-format.ts` | Whether the project's preview is a CSF factory preview, and the preview import specifier for new factory story files |
 | `src/utils/normalize-runtime-imports.ts` | Normalizes runtime import specifiers across hosts |
 | `src/utils/storybook-docs-url.ts` | Resolves the Storybook docs URL for the "Open Docs" command |
 | `src/codegen/interactions-to-code.ts` | Converts recorded interactions to play-function code |
@@ -467,12 +613,13 @@ function, the server broadcasts, a client-registered handler acts on the DOM.
 | `scroll-to-component` | `do-scroll-to-component` | Scroll the app page to a component instance and pulse it |
 | `toggle-highlight-visibility` | `do-toggle-highlight-visibility` | Show/hide the selected component's persistent highlight |
 | `highlight-coverage-instances` | `do-highlight-coverage` | Show/clear coverage highlights |
-| `highlight-coverage-batch` | `do-highlight-coverage-batch` | Batch-highlight coverage instances (Preview button) |
+| `highlight-coverage-batch` | `do-highlight-coverage-batch` | Batch-highlight coverage instances (Highlight missing button) |
 | `set-highlight-mode` | `do-set-highlight-mode` | Toggle highlight mode |
 | `set-prop` | `do-set-prop` | Panel live-edits a prop via `__componentHighlighterSetProp` |
 | `reset-prop` | `do-reset-prop` | Panel resets a prop via `__componentHighlighterResetProp` |
 | `select-component` | `do-select-component` | Client/overlay selects a component in the panel |
 | `visit-story` | `do-visit-story` | Tell the panel to navigate to a story |
+| `create-stories` | `story-created` (per write) | Bulk creation with one summary notification |
 | `notify` | — (server-side only) | Show a toast notification |
 | — (create-story handler) | `story-created` | Server broadcasts the story creation result; client relays it to `visit-story` when Storybook is running |
 | — (command handler) | `do-open-url` | Open a URL in a new tab (e.g. Storybook docs) |
@@ -615,15 +762,37 @@ pnpm exec playwright test e2e/playground-rsbuild-detection.spec.ts   # port 5177
 # Next.js host detection (React 19, App Router, RSC boundary) + shared suites
 pnpm exec playwright test e2e/playground-next-detection.spec.ts      # port 5178
 
-# Highlighter interaction tests (context menu, story creation)
-pnpm exec playwright test e2e/component-highlighter.spec.ts
+# Shared suites are registered by each playground spec; filter by suite name
+pnpm exec playwright test -g "common highlighter features"
 
-# Common highlighter features (runs for both frameworks)
-pnpm exec playwright test e2e/common-highlighter-suite.ts
+# Actual dock first-click activation and panel rendering (all six hosts)
+pnpm exec playwright test -g "storybook panel render"
 
 # Listeners-ready registry replay (late-loading listeners recovery, all playgrounds)
 pnpm exec playwright test -g "listeners-ready registry replay"
 ```
+
+Playwright runs tests within each playground sequentially because panel RPC
+and shared state are server-global. CI uses two workers to run independent
+playground projects concurrently. The disk-writing Storybook integration
+suite explicitly retains one worker because hosts share story files and a
+Storybook port. Close active inspector previews on test ports, or use
+isolated playground ports, to prevent manual sessions from changing test state.
+
+CI builds first, then runs unit tests, typechecking, the regular browser suite,
+and the serial Storybook integration suite against the workspace's locked
+Storybook 11 version. Their HTML reports use separate
+subdirectories so the second run does not overwrite the first.
+`PLAYWRIGHT_PORT_OFFSET` offsets all playground ports and disables reuse of
+existing servers; `STORYBOOK_E2E_URL` changes the playgrounds' Storybook URL and
+the integration suite's target together. The serial suite must also run
+separately from unit tests, because it mutates fixtures used by indexing tests.
+
+`tests/package-dependencies.test.ts` parses built ESM imports and checks that
+external packages are declared as dependencies or peers, rather than relying
+on workspace hoisting. `@vue/compiler-sfc` and `@vitejs/devtools-kit` are runtime
+dependencies; `react-is` is resolved directly by the React adapters and is also
+a runtime dependency. React is an optional peer for the React runtime.
 
 The playgrounds import `client/listeners` eagerly for deterministic E2E
 activation; real consuming apps don't, so their listeners module loads late
@@ -631,6 +800,11 @@ activation; real consuming apps don't, so their listeners module loads late
 `e2e/common-listeners-replay-suite.ts` covers the recovery path: it clears
 the client registry, re-dispatches `component-highlighter:listeners-ready`,
 and asserts the runtime replays the full registry with working highlighting.
+
+## Design follow-ups
+
+Coverage-list and highlighter-tab design decisions are documented in
+[DESIGN_FOLLOW_UPS.md](./DESIGN_FOLLOW_UPS.md).
 
 ## Known caveats
 

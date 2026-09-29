@@ -24,6 +24,58 @@ const INTERACTION_COMPONENT = 'TaskForm'
 const MULTI_INSTANCE_COMPONENT = 'Badge'
 
 export function registerCommonHighlighterSuite(test: TestLike) {
+  for (const hasStory of [false, true]) {
+    test(`hover colors and label alignment with stories=${hasStory}`, async ({ page }) => {
+      await page.goto('/')
+      await page.waitForFunction(() => {
+        const w = window as any
+        return w.__componentHighlighterRegistry?.size && (w.__VITE_DEVTOOLS_CLIENT_CONTEXT__ || w.__DEVFRAME_HUB_CLIENT_CONTEXT__)?.rpc
+      })
+      // Control only story existence; exercise the real overlay and registry.
+      await page.evaluate((hasStory) => {
+        const w = window as any
+        const ctx = w.__VITE_DEVTOOLS_CLIENT_CONTEXT__ || w.__DEVFRAME_HUB_CLIENT_CONTEXT__
+        const original = ctx.rpc.call.bind(ctx.rpc)
+        ctx.rpc.call = (method: string, ...args: unknown[]) => method === 'component-highlighter:check-story'
+          ? Promise.resolve({ hasStory, storyPath: hasStory ? '/Badge.stories.tsx' : null })
+          : original(method, ...args)
+      }, hasStory)
+      await enableHighlighting(page)
+      const id = await hoverComponent(page, 'Badge')
+      const box = page.locator(`[data-highlight-id="${id}"]`)
+      await expect(box.locator('.ch-highlight-label')).toBeVisible()
+      const color = hasStory ? 'rgb(255, 71, 133)' : 'rgb(0, 109, 235)'
+      await expect(box).toHaveCSS('outline-color', color)
+      await expect(box).toHaveCSS('outline-style', 'solid')
+      const siblings = page.locator(`[data-highlight-id]:not([data-highlight-id="${id}"])`)
+      expect(await siblings.count()).toBeGreaterThan(0)
+      await expect(siblings.first()).toHaveCSS('outline-color', color)
+      await expect(siblings.first()).toHaveCSS('outline-style', 'dashed')
+      if (hasStory) {
+        const pill = await box.locator('.ch-label-name').boundingBox()
+        const rect = await box.boundingBox()
+        const badge = await box.locator('.ch-label-badge').boundingBox()
+        expect(pill!.x).toBeCloseTo(rect!.x, 0)
+        expect(badge!.x + badge!.width).toBeLessThan(pill!.x)
+        // Move the actual component to the viewport edge and re-hover.
+        await page.evaluate((id) => {
+          const el = (window as any).__componentHighlighterRegistry.get(id).element as HTMLElement
+          el.style.position = 'fixed'
+          el.style.left = '0px'
+          el.style.top = '100px'
+          el.style.zIndex = '999'
+        }, id)
+        await page.mouse.move(600, 10)
+        await hoverComponent(page, 'Badge')
+        await expect(box).toHaveCSS('left', '0px')
+        await expect.poll(async () => (await box.locator('.ch-label-badge').boundingBox())?.x).toBe(0)
+        expect((await box.locator('.ch-label-name').boundingBox())!.x).toBe(22)
+      } else {
+        await expect(box.locator('.ch-label-badge')).toBeHidden()
+      }
+    })
+  }
+
   test.describe('common highlighter features', () => {
     test.beforeEach(async ({ page }) => {
       await page.goto('/')
@@ -39,24 +91,11 @@ export function registerCommonHighlighterSuite(test: TestLike) {
     test('shows hover highlight behavior when hovering a component', async ({ page }) => {
       await hoverTaskListHeading(page)
 
-      const hasHoveredHighlight = await page.evaluate(() => {
-        const els = Array.from(
-          document.querySelectorAll(
-            '#component-highlighter-container div[data-highlight-id]',
-          ),
-        ) as HTMLElement[]
-
-        return els.some((el) => {
-          const style = window.getComputedStyle(el)
-          // Highlights use outline (not border) for strokes
-          return (
-            style.outlineColor.includes('255, 71, 133') ||
-            style.backgroundColor.includes('255, 71, 133')
-          )
-        })
-      })
-
-      expect(hasHoveredHighlight).toBe(true)
+      const hovered = page.locator('.ch-highlight-label').first()
+      await expect(hovered).toBeVisible()
+      // Story existence varies when users generate stories in the playground.
+      // The controlled stories=true/false cases above cover exact colors.
+      await expect(hovered.locator('..')).toHaveCSS('outline-style', 'solid')
     })
 
     test('hide highlights hides only the selection and keeps hover/select working', async ({ page }) => {

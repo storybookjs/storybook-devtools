@@ -18,6 +18,7 @@ import { createRequire } from 'module'
 import { normalizeHubBase } from '@devframes/hub/constants'
 import type { DevframeHubContext } from '@devframes/hub'
 import { nextDevframeHub } from '@devframes/next/hub'
+import createMessagesDevframe from '@devframes/plugin-messages'
 import { createTerminalsDevframe } from '@devframes/plugin-terminals'
 import {
   createComponentHighlighterUnplugin,
@@ -36,6 +37,7 @@ import {
   type CreateStorybookDevframeDeps,
 } from './context'
 import { createStoryIndexService, type StoryIndexService } from './story-index'
+import { resolveDualStackSidecarPort } from './sidecar-port'
 
 /** Next.js framework config: React instrumentation, `@storybook/nextjs` story output. */
 export const nextFramework: FrameworkConfig = {
@@ -196,6 +198,12 @@ interface StorybookDevtoolsNextGlobalState {
    * has to.
    */
   storyIndexService: StoryIndexService | null
+  /**
+   * Resolved sidecar port per hub `base`, memoised so Next's dev-time route
+   * re-evaluation probes ports once rather than on every request — same
+   * reasoning as `@devframes/next`'s own `nextDevframeHub` registry.
+   */
+  sidecarPortByBase: Map<string, Promise<number>>
 }
 
 const GLOBAL_STATE_KEY = '__storybookDevtoolsNextGlobalState__'
@@ -301,6 +309,7 @@ function getGlobalState(): StorybookDevtoolsNextGlobalState {
       },
       diagnostics: null,
       storyIndexService: null,
+      sidecarPortByBase: new Map(),
     }
     g[GLOBAL_STATE_KEY] = existing
   }
@@ -695,36 +704,55 @@ export function createStorybookDevtoolsRoute(
     storyIndexService,
   }
 
-  const hub = nextDevframeHub({
-    base,
-    ...(options.port != null ? { port: options.port } : {}),
-    ...(options.host != null ? { host: options.host } : {}),
-    ...(options.origin != null ? { origin: options.origin } : {}),
-    auth: options.auth ?? true,
-    // The aggregate MCP endpoint needs the optional `@modelcontextprotocol/server`
-    // peer this package doesn't declare; out of scope for the DevTools panel.
-    mcp: false,
-    // The Terminals dock is a separate devframe; `@vitejs/devtools` mounts
-    // it on the Vite host, so the Next hub mounts it too for the same
-    // "Open Terminal" → Storybook session experience.
-    devframes: [createStorybookDevframe(deps), createTerminalsDevframe()],
-    configure: (ctx: DevframeHubContext) => {
-      const { diagnostics } = registerStorybookHubSurfaces(ctx, {
-        deps,
-        devtoolsDockId,
-        dockClientScript: {
-          importFrom: CLIENT_BUNDLE_PUBLIC_PATH,
-          importName: 'default',
-        },
-      })
-      globalState.diagnostics = diagnostics
-    },
-  })
+  // A pinned port only binds the family `host` below names; an unrelated
+  // devframe hub (another Next/Vite/Rsbuild dev server) can still be
+  // listening on the SAME port number on the other loopback family — a page
+  // opened at an ambiguous hostname like `localhost` then reaches that
+  // foreign hub instead of this one. Probing both families first (unless
+  // the caller pinned a port explicitly) means no other hub owns this port
+  // number on either. Memoised per `base` so repeated route-module
+  // re-evaluation in dev doesn't reprobe on every request.
+  let sidecarPortPromise = globalState.sidecarPortByBase.get(base)
+  if (!sidecarPortPromise) {
+    sidecarPortPromise =
+      options.port != null
+        ? Promise.resolve(options.port)
+        : resolveDualStackSidecarPort()
+    globalState.sidecarPortByBase.set(base, sidecarPortPromise)
+  }
+
+  const hubReady = sidecarPortPromise.then((port) =>
+    nextDevframeHub({
+      base,
+      port,
+      ...(options.host != null ? { host: options.host } : {}),
+      ...(options.origin != null ? { origin: options.origin } : {}),
+      auth: options.auth ?? true,
+      // The aggregate MCP endpoint needs the optional `@devframes/agentic`
+      // peer this package doesn't declare; out of scope for the DevTools panel.
+      mcp: false,
+      // The Terminals dock is a separate devframe; `@vitejs/devtools` mounts
+      // it on the Vite host, so the Next hub mounts it too for the same
+      // "Open Terminal" → Storybook session experience.
+      devframes: [createStorybookDevframe(deps), createTerminalsDevframe(), createMessagesDevframe()],
+      configure: (ctx: DevframeHubContext) => {
+        const { diagnostics } = registerStorybookHubSurfaces(ctx, {
+          deps,
+          devtoolsDockId,
+          dockClientScript: {
+            importFrom: CLIENT_BUNDLE_PUBLIC_PATH,
+            importName: 'default',
+          },
+        })
+        globalState.diagnostics = diagnostics
+      },
+    }),
+  )
 
   return {
-    GET: (req: Request) => hub.handler(req),
-    POST: (req: Request) => hub.handler(req),
-    DELETE: (req: Request) => hub.handler(req),
+    GET: async (req: Request) => (await hubReady).handler(req),
+    POST: async (req: Request) => (await hubReady).handler(req),
+    DELETE: async (req: Request) => (await hubReady).handler(req),
   }
 }
 

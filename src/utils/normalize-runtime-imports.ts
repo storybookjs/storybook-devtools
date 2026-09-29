@@ -19,5 +19,11 @@ export function normalizeRuntimeImports(code: string, base: string): string {
     `${escapedPrefix}/@id/__x00__${RUNTIME_HELPER_VIRTUAL_ID.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\?t=\\d+)?`,
     'g',
   )
-  return code.replace(pattern, RUNTIME_HELPER_VIRTUAL_ID)
+  // Source-mode runtime modules have already passed through transformRequest.
+  // The virtual module is analyzed again: /@fs is a resolvable filesystem id,
+  // while a base-prefixed /_nuxt/@fs URL is only valid in browser requests.
+  const sourceImport = new RegExp(`(["'])${escapedPrefix}/@fs/`, 'g')
+  return code
+    .replace(pattern, RUNTIME_HELPER_VIRTUAL_ID)
+    .replace(sourceImport, '$1/@fs/')
 }
