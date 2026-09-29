@@ -1,5 +1,9 @@
 # Architecture review — the devframe-era shape
 
+> Historical design notes. Version references and proposed work describe the
+> original investigation; see [Architecture](../ARCHITECTURE.md) and
+> [Supported frameworks](../SUPPORTED_FRAMEWORKS.md) for current behavior.
+
 A layer-by-layer judgment of the plugin's architecture now that it runs on devframe
 (definition in `src/devframe.ts`, instrumentation delivered through the unplugin core in
 `src/unplugin.ts`). The devframe platform provides primitives — patch-synced shared state,

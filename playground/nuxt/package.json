@@ -20,14 +20,14 @@
     "@vitejs/devtools": "^0.7.6",
     "@vitejs/devtools-kit": "^0.7.6",
     "@vitejs/plugin-vue": "^6.0.7",
-    "@vitest/browser-playwright": "^4.1.9",
-    "@vitest/coverage-v8": "^4.1.9",
-    "nuxt": "4.2.1",
+    "@vitest/browser-playwright": "^4.1.11",
+    "@vitest/coverage-v8": "^4.1.11",
+    "nuxt": "4.5.2",
     "playwright": "^1.57.0",
     "storybook": "10.6.0",
     "typescript": "^5.9.3",
     "vite": "^8.3.1",
-    "vitest": "^4.1.9",
+    "vitest": "^4.1.11",
     "vue": "^3.5.28",
     "vue-tsc": "^3.2.5"
   }

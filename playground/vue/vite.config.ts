@@ -30,6 +30,7 @@ export default defineConfig({
     process.env.STORYBOOK
       ? null
       : componentHighlighter({
+          storybookUrl: process.env.STORYBOOK_E2E_URL || 'http://localhost:6006',
           debugMode: false,
         }),
   ].filter(Boolean),

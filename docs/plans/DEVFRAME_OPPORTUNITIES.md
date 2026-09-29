@@ -1,5 +1,9 @@
 # Opportunities unlocked by the devframe foundation
 
+> Historical design notes. Version references and proposed work describe the
+> original investigation; see [Architecture](../ARCHITECTURE.md) and
+> [Supported frameworks](../SUPPORTED_FRAMEWORKS.md) for current behavior.
+
 The plugin now runs on devframe 0.9 (`src/devframe.ts` holds the definition; Vite mounts it
 through `@vitejs/devtools-kit`'s `createPluginFromDevframe`). Beyond the host-portability
 work already planned in the phased migration

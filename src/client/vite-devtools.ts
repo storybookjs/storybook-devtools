@@ -6,7 +6,7 @@ import {
   showStoryCreationFeedback,
   hideContextMenu,
 } from './overlay'
-import { setRegistryRpcCall } from './listeners'
+import { autoInitRpc, setRegistryRpcCall } from './listeners'
 import {
   getActiveSurface,
   setActiveSurface,
@@ -17,10 +17,15 @@ import { debug, error as logError } from './logger'
 // Track previous subscription so we never stack duplicate listeners
 // (clientScriptSetup may be called more than once on HMR or dock reconnect)
 let unsubLogInfo: (() => void) | null = null
-let storyCreatedHandlerRegistered = false
+const visitStoryClients = new WeakSet<object>()
+const storyCreatedClients = new WeakSet<object>()
+const initializedDocks = new WeakSet<object>()
 
 export default function clientScriptSetup(ctx: DockClientScriptContext): void {
   debug('clientScriptSetup called')
+  // The action can be imported on the first click, before the listeners'
+  // host-context retry has run. Register receivers before broadcasting.
+  autoInitRpc()
 
   // Inject RPC call function into listeners.ts so it can push registry diffs.
   // Wait for trust first to avoid "Unauthorized access" errors.
@@ -59,25 +64,32 @@ export default function clientScriptSetup(ctx: DockClientScriptContext): void {
     })
   }
 
-  ctx.current.events.on('entry:activated', () => {
+  const activate = () => {
     debug('dock activated - enabling highlight mode')
     // Claim "driver" for this surface, so panel-open/navigation actions that
     // follow (e.g. Go to story) route here instead of popping every surface.
     setActiveSurface(ctx.rpc, ctx.clientType)
     setHighlightMode(true)
-  })
+  }
 
-  ctx.current.events.on('entry:deactivated', () => {
-    debug('dock deactivated - disabling highlight mode')
-    setHighlightMode(false)
-  })
+  if (!initializedDocks.has(ctx.current)) {
+    initializedDocks.add(ctx.current)
+    ctx.current.events.on('entry:activated', activate)
+    ctx.current.events.on('entry:deactivated', () => {
+      debug('dock deactivated - disabling highlight mode')
+      setHighlightMode(false)
+    })
+    // The hub selects action entries before importing/executing their script.
+    // That initial event has already fired; subsequent selections use events.
+    if (ctx.current.isActive) activate()
+  }
 
   // Open/switch this surface's Storybook panel when a story is visited —
   // but only on the surface that's currently driving. The `do-visit-story`
   // broadcast reaches every connected surface; the panel iframe navigation
   // is handled separately (panel.ts) on all of them, while the dock only
   // opens where the user is actually working.
-  if (ctx.rpc.client) {
+  if (ctx.rpc.client && !visitStoryClients.has(ctx.rpc.client)) {
     try {
       ctx.rpc.client.register({
         name: 'component-highlighter:do-visit-story',
@@ -90,6 +102,7 @@ export default function clientScriptSetup(ctx: DockClientScriptContext): void {
           }
         },
       })
+      visitStoryClients.add(ctx.rpc.client)
     } catch {
       // Client RPC registration not supported
     }
@@ -145,8 +158,7 @@ export default function clientScriptSetup(ctx: DockClientScriptContext): void {
   })
 
   // Listen for story creation confirmation, broadcast by the server via RPC.
-  if (!storyCreatedHandlerRegistered && ctx.rpc.client) {
-    storyCreatedHandlerRegistered = true
+  if (ctx.rpc.client && !storyCreatedClients.has(ctx.rpc.client)) {
     try {
       ctx.rpc.client.register({
         name: 'component-highlighter:story-created',
@@ -208,6 +220,7 @@ export default function clientScriptSetup(ctx: DockClientScriptContext): void {
           }
         },
       })
+      storyCreatedClients.add(ctx.rpc.client)
     } catch {
       // Client RPC registration not supported
     }

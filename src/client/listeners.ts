@@ -123,7 +123,7 @@ function pushFullRegistry() {
  */
 let rpcHandlersRegistered = false
 
-function autoInitRpc() {
+export function autoInitRpc() {
   if (rpcCallFn && rpcHandlersRegistered) return
 
   let attempts = 0
@@ -302,7 +302,7 @@ function autoInitRpc() {
       setTimeout(tryInit, 500)
     }
   }
-  setTimeout(tryInit, 500)
+  tryInit()
 }
 
 function serializeInstance(

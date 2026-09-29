@@ -75,10 +75,10 @@ wraps components.
   `__chRegisterMeta(Component, { componentName, filePath,
   relativeFilePath, sourceId, isDefaultExport })`. The fiber tree is
   untouched.
-- **Vue**: prepends one side-effect import,
-  `import 'virtual:component-highlighter/vue-runtime'`, to the
-  `<script setup>`/`<script>` block. Everything else is preserved
-  byte-for-byte. Source identity is read at runtime from Vue's own
+- **Vue**: prepends a runtime import and `registerComponentSource(filePath)`
+  call to the `<script setup>`/`<script>` block. Everything else is preserved
+  byte-for-byte. The runtime accepts only these source paths, respecting the
+  transform's include/exclude filter. Source identity is read from Vue's own
   `instance.type.__file`/`__name`.
 
 Both report non-fatal detection gaps through `TransformOptions.onIssue`,
@@ -126,6 +126,40 @@ runtime replay above. It renders highlight rectangles in
 `#component-highlighter-container`, handles hover/click/keyboard shortcuts,
 and drives the Shadow DOM context menu. `src/client/interaction-recorder.ts`
 captures user actions as play-function steps for "Create with Interactions".
+
+`vite-devtools.ts` handles the action dock's lifecycle. The hub selects an
+action before importing its client script, so setup checks `current.isActive`
+to recover the first activation and binds events once per dock state. RPC
+receivers initialize immediately when a host context is available, before
+the activation broadcast; delayed host startup still uses the retry loop.
+
+The portable devframe declares `@devframes/service-open`, including the
+repository root for symlinked source trees. The Vite adapter omits that
+declaration and reuses the service supplied by the host's Messages plugin
+(whose workspace root covers workspace packages), falling back to Vite's
+editor endpoint when unavailable. Devframe 1.1.0 can race late service
+installations after `services.ready()`, producing duplicate RPCs (`DF0021`).
+Rsbuild/Next collect their service declarations before the shared barrier.
+Navigation and story-created client RPC handlers are registered once per RPC
+client, so repeated action execution does not emit duplicate-registration
+warnings and a replacement connection gets its own handlers.
+
+When serving runtime source through a virtual module, `transformRequest`
+has already rewritten its imports. `normalizeRuntimeImports` restores helper
+virtual IDs and removes the public base from `/@fs/` imports before Vite's
+second import-analysis pass. This matters for Nuxt's `/_nuxt/` base; leaving
+that browser URL prefix in the module specifier prevents source resolution.
+The Nuxt 4.5 playground uses Vite's native `devtools.enabled` option rather
+than adding another explicit `DevTools()` plugin.
+Vue prop serialization uses `frameworks/vue/serialize-value.ts` to bound
+object/array traversal at six levels and replace circular references with
+`[Circular]`, matching React's bounded-serialization approach. Shared objects
+in separate branches remain serializable. SSR tests reject highlighter
+console errors as well as hydration mismatches.
+The Vue hook only accepts SFCs registered by the transform. This also keeps
+Nuxt DevTools' precompiled internal components out of the registry, even when
+their embedded `__file` paths do not contain `node_modules`, and prevents
+them from postponing app sync.
 
 ### 5. DevTools panel
 
@@ -406,7 +440,7 @@ function, one file per function under `src/rpc/functions/`, collected by
 | `reset-prop` | action | Panel resets a prop to its original value |
 | `select-component` | action | Client/overlay selects a component in the panel |
 | `visit-story` | action | Tell the panel to navigate to a story |
-| `create-stories` | `story-created` (per write) | Bulk creation with one summary notification |
+| `create-stories` | action | Bulk creation with one summary notification and a `story-created` broadcast per write |
 | `notify` | action | Show a toast notification via DevTools logs |
 | `highlight-target` | action | Debug-log the current highlight target |
 | `toggle-overlay` | action | Debug-log an overlay toggle |
@@ -464,7 +498,7 @@ their hub, so this plugin's installation is the only one there.
 | `src/rpc/index.ts` | `serverFunctions` barrel and RPC/shared-state type augmentation |
 | `src/context.ts` | Maps a devframe context to the deps it was created with |
 | `src/devframe-export.ts` | `./devframe` entry for mounting the definition in a custom DevTools host |
-| `src/frameworks/<fw>/transform.ts` | Build-time tagging (React metadata call; Vue runtime import) |
+| `src/frameworks/<fw>/transform.ts` | Build-time tagging (React metadata call; Vue runtime import and source registration) |
 | `src/frameworks/react/devtools-hook.ts` | Inline script installing the React DevTools global hook |
 | `src/frameworks/vue/devtools-hook.ts` | Inline script installing the Vue DevTools global hook |
 | `src/frameworks/nuxt/plugin.ts` | Nuxt entry: SSR head-script helpers and the dev-server bridge module |
@@ -681,11 +715,11 @@ pnpm exec playwright test e2e/playground-rsbuild-detection.spec.ts   # port 5177
 # Next.js host detection (React 19, App Router, RSC boundary) + shared suites
 pnpm exec playwright test e2e/playground-next-detection.spec.ts      # port 5178
 
-# Highlighter interaction tests (context menu, story creation)
-pnpm exec playwright test e2e/component-highlighter.spec.ts
+# Shared suites are registered by each playground spec; filter by suite name
+pnpm exec playwright test -g "common highlighter features"
 
-# Common highlighter features (runs for both frameworks)
-pnpm exec playwright test e2e/common-highlighter-suite.ts
+# Actual dock first-click activation and panel rendering (all six hosts)
+pnpm exec playwright test -g "storybook panel render"
 
 # Listeners-ready registry replay (late-loading listeners recovery, all playgrounds)
 pnpm exec playwright test -g "listeners-ready registry replay"
@@ -695,6 +729,20 @@ Playwright runs tests within each playground sequentially because panel RPC
 and shared state are server-global. Different playground projects can still
 run concurrently. Close active inspector previews on test ports, or use
 isolated playground ports, to prevent manual sessions from changing test state.
+
+CI builds first, then runs unit tests, typechecking, the regular browser suite,
+and the serial Storybook integration suite. Their HTML reports use separate
+subdirectories so the second run does not overwrite the first.
+`PLAYWRIGHT_PORT_OFFSET` offsets all playground ports and disables reuse of
+existing servers; `STORYBOOK_E2E_URL` changes the playgrounds' Storybook URL and
+the integration suite's target together. The serial suite must also run
+separately from unit tests, because it mutates fixtures used by indexing tests.
+
+`tests/package-dependencies.test.ts` parses built ESM imports and checks that
+external packages are declared as dependencies or peers, rather than relying
+on workspace hoisting. `@vue/compiler-sfc` and `@vitejs/devtools-kit` are runtime
+dependencies; `react-is` is resolved directly by the React adapters and is also
+a runtime dependency. React is an optional peer for the React runtime.
 
 The playgrounds import `client/listeners` eagerly for deterministic E2E
 activation; real consuming apps don't, so their listeners module loads late

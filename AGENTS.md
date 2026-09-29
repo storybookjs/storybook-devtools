@@ -139,6 +139,9 @@ ctx.rpc.requestTrustWithToken(token);
   (`src/story-index.ts`, `src/coverage-dashboard.ts`)
 - Hover on coverage rows: highlight overlays appear on app page (`[data-coverage-highlight]`)
 - Highlight toggle: `window.__componentHighlighterIsActive()` reflects state, cursor changes
+- First dock activation: click the real Component Highlighter button on a fresh
+  page, verify hover outlines, then close and reopen it. Automation enable hooks
+  bypass the lazy action-script lifecycle and cannot prove this behavior.
 - Scroll-to-component: locate button triggers scroll via RPC
 - Create story / Generate all: stories created without errors; bulk creation
   emits one summary notification, including the failure count
@@ -189,6 +192,13 @@ free before running it. React 18 has no
 `.storybook` config: it checks fallback coverage and the launch failure UI.
 The other five playgrounds must launch and render successfully.
 
+To isolate QA from running developer servers, set `PLAYWRIGHT_PORT_OFFSET`
+(for example `20`) and `STORYBOOK_E2E_URL` (for example
+`http://localhost:6007`). The former offsets all six playground ports and
+disables server reuse; the latter configures both playgrounds and integration
+assertions. Do not run this serial suite concurrently with unit tests or other
+browser suites: they read the same story fixtures that it temporarily mutates.
+
 The regular save-flow E2Es inspect emitted payloads; they do **not** prove
 that disk writes, Storybook indexing, or the generated preview work.
 When reviewing these paths, also cover concurrent saves, existing import
@@ -198,6 +208,10 @@ Webpack/rspack do not watch stories outside the app import graph; tests
 must edit files without manually calling `invalidate()` to verify refresh.
 
 Run the broader test set too when the change touches more than one area.
+
+CI runs the build, unit tests, typecheck, and both browser suites on Node 24.
+Shared E2E suites are registered by playground specs; select them with `-g`
+or a playground spec path, not the shared suite's `.ts` filename.
 
 ## PR Hygiene
 

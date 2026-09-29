@@ -21,6 +21,11 @@ Vite: `./react`, `./vue`, or the unified `./vite` entry. Rsbuild: `./rsbuild`
 (`withStorybookDevtools()`). See the README's per-host sections for setup
 and host-specific options.
 
+The shared browser suite exercises first-click highlighter activation and
+repeated close/reopen through the actual dock on all six playgrounds. A separate
+serial suite launches Storybook and verifies generated stories and previews on
+five hosts; React 18 intentionally tests the missing-config failure path.
+
 ## React
 
 - Package: `src/frameworks/react`. React 18 and 19 are both required and
@@ -49,12 +54,19 @@ and host-specific options.
   coverage — treat Vue-on-Rsbuild as unverified.
 - Detection installs a minimal `__VUE_DEVTOOLS_GLOBAL_HOOK__` before the
   app's `createApp` runs, then subscribes to Vue's devtools events.
-  Components are never wrapped.
+  Components are never wrapped. Only source paths accepted by the transform's
+  include/exclude filter are tracked; dependency-owned DevTools components
+  are excluded from the app registry.
 - Caveat: unmount tracking requires the hook's `cleanupBuffer` method,
   present only because the hook is installed before the app mounts. Live
   prop editing is supported; see docs/ARCHITECTURE.md for the mechanism.
 
 ## Nuxt SSR
+
+- The release QA playground uses Nuxt 4.5.2, with Vite's native
+  `devtools.enabled` option. Do not add an explicit `DevTools()` plugin to
+  this setup; older Nuxt builders required it, but this version mounts it
+  automatically.
 
 - Standalone Storybook uses `@storybook/vue3-vite` with an explicit
   `@vitejs/plugin-vue` in `.storybook/main.ts`. It does not inherit

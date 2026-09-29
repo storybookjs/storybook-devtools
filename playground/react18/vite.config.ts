@@ -27,6 +27,7 @@ export default defineConfig({
   plugins: [
     react(),
     componentHighlighter({
+      storybookUrl: process.env.STORYBOOK_E2E_URL || 'http://localhost:6006',
       debugMode: true,
     }),
   ],

@@ -11,6 +11,29 @@ export function registerPanelRenderSuite(
   opts: { componentName: string },
 ) {
   test.describe('storybook panel render', () => {
+    test('first highlighter dock click activates, closes, and reactivates', async ({ page }) => {
+      test.setTimeout(120_000)
+      const duplicateRpcWarnings: string[] = []
+      page.on('console', message => {
+        if (message.text().includes('DF0021')) duplicateRpcWarnings.push(message.text())
+      })
+      await page.goto('/')
+      await page.request.get('/__devframes/__connection.json').catch(() => {})
+      const dock = page.locator('devframes-dock-embedded button[aria-label="Component Highlighter"]')
+      await dock.waitFor({ state: 'attached', timeout: 90_000 })
+      for (const enabled of [true, false, true, false]) {
+        await dock.dispatchEvent('click')
+        await expect.poll(() => page.evaluate(() =>
+          (window as any).__componentHighlighterIsActive?.() ?? false,
+        )).toBe(enabled)
+        if (enabled) {
+          await page.getByRole('heading', { name: 'All Tasks' }).hover()
+          await expect(page.locator('#component-highlighter-container [data-highlight-id]').first()).toBeVisible()
+        }
+      }
+      expect(duplicateRpcWarnings).toEqual([])
+    })
+
     test('panel renders and coverage lists a component from the page', async ({
       page,
     }) => {

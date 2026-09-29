@@ -1,6 +1,5 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { DevTools } from '@vitejs/devtools'
 import { defineNuxtConfig } from 'nuxt/config'
 
 import componentHighlighter, {
@@ -44,18 +43,16 @@ export default defineNuxtConfig({
       host: '127.0.0.1',
     },
     devtools: {
-      enabled: true,
+      enabled: !isStorybook,
       clientAuth: false,
     },
-    // Unlike a plain Vite project, Nuxt's own `@nuxt/vite-builder` does not
-    // trigger Vite's native `devtools.enabled` dev-server integration, so
-    // the dock never mounts without registering the `DevTools()` plugin
-    // here explicitly.
+    // Nuxt 4.5 forwards Vite's native devtools option. Adding DevTools()
+    // here as well would register the host twice.
     plugins: [
-      isStorybook ? null : DevTools(),
       isStorybook
         ? null
         : componentHighlighter({
+            storybookUrl: process.env.STORYBOOK_E2E_URL || 'http://localhost:6006',
             debugMode: false,
           }),
     ].filter(Boolean),

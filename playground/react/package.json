@@ -26,14 +26,14 @@
     "@vitejs/devtools": "^0.7.6",
     "@vitejs/devtools-kit": "^0.7.6",
     "@vitejs/plugin-react": "^6.0.3",
-    "@vitest/browser-playwright": "^4.1.9",
-    "@vitest/coverage-v8": "^4.1.9",
+    "@vitest/browser-playwright": "^4.1.11",
+    "@vitest/coverage-v8": "^4.1.11",
     "playwright": "^1.57.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "storybook": "10.6.0",
     "typescript": "^5.9.3",
     "vite": "^8.3.1",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.11"
   }
 }

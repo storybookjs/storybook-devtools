@@ -3,6 +3,8 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { loadCsf } from 'storybook/internal/csf-tools'
 
+const storybookUrl = process.env.STORYBOOK_E2E_URL || 'http://localhost:6006'
+
 async function rpc(page: Page, method: string, ...args: unknown[]) {
   return page.evaluate(async ({ method, args }) => {
     const ctx = (window as any).__VITE_DEVTOOLS_CLIENT_CONTEXT__ ||
@@ -106,7 +108,7 @@ test('panel launch, real story writes and preview', async ({ page }, testInfo) =
       return
     }
     await expect(panel.locator('.sb-iframe')).toBeVisible({ timeout: 120_000 })
-    const indexResponse = await page.request.get('http://localhost:6006/index.json')
+    const indexResponse = await page.request.get(`${storybookUrl}/index.json`)
     expect(indexResponse.ok()).toBe(true)
     const index = await indexResponse.json()
     const entries = Object.values(index.entries) as Array<{
@@ -116,7 +118,7 @@ test('panel launch, real story writes and preview', async ({ page }, testInfo) =
       entry.importPath.includes('Button.stories') && entry.name === 'Recorded')
     expect(recorded).toBeTruthy()
     const preview = await page.context().newPage()
-    await preview.goto(`http://localhost:6006/iframe.html?id=${recorded!.id}&viewMode=story`)
+    await preview.goto(`${storybookUrl}/iframe.html?id=${recorded!.id}&viewMode=story`)
     await expect(preview.getByRole('button', {
       name: 'Peer review', exact: true,
     })).toBeVisible({ timeout: 60_000 })
@@ -178,7 +180,7 @@ test('panel launch, real story writes and preview', async ({ page }, testInfo) =
         await rpc(page, 'hub:terminals:terminate', 'storybook-dev')
         await expect.poll(async () => {
           try {
-            return (await page.request.get('http://localhost:6006', { timeout: 1000 })).ok()
+            return (await page.request.get(storybookUrl, { timeout: 1000 })).ok()
           } catch {
             return false
           }

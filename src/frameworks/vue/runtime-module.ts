@@ -29,6 +29,7 @@ import {
   setAtPath,
 } from 'virtual:component-highlighter/runtime-helpers'
 import { serializeVNodeToTemplate } from './vnode-to-template'
+import { serializeValue } from './serialize-value'
 
 // Injected by the virtual module loader.
 declare const __COMPONENT_HIGHLIGHTER_DEBUG__: boolean
@@ -123,6 +124,14 @@ function basenameWithoutExt(filePath: string): string {
 
 // Per-path meta cache (sourceId is stable per file).
 const metaByFile = new Map<string, Meta>()
+const componentSources = new Set<string>()
+
+// Only SFCs accepted by the host's include/exclude filter register here.
+// Dependency builds may contain absolute __file paths from another machine,
+// so checking for node_modules in their native metadata is insufficient.
+export function registerComponentSource(filePath: string) {
+  componentSources.add(filePath.replace(/\\/g, '/'))
+}
 
 function getMeta(instance: VueInstance): Meta | null {
   const type = instance.type
@@ -130,6 +139,7 @@ function getMeta(instance: VueInstance): Meta | null {
   // SFC components stamped by @vitejs/plugin-vue carry an absolute __file. Skip
   // anything without one (built-in/functional/devtools-internal components).
   if (!filePath || typeof filePath !== 'string') return null
+  if (!componentSources.has(filePath.replace(/\\/g, '/'))) return null
 
   const cached = metaByFile.get(filePath)
   if (cached) return cached
@@ -287,59 +297,6 @@ function getStoryProps(
   return storyProps
 }
 
-/**
- * Serialize a single value (handles Vue reactive objects).
- */
-function serializeValue(value: unknown): unknown {
-  // Handle Vue reactive objects
-  if (value && typeof value === 'object') {
-    if (typeof (value as { toJSON?: () => unknown }).toJSON === 'function') {
-      // Vue ref or reactive object
-      try {
-        return JSON.parse(
-          JSON.stringify(
-            (value as { toJSON?: () => unknown }).toJSON?.() ?? value,
-          ),
-        )
-      } catch {
-        return undefined
-      }
-    } else if (Array.isArray(value)) {
-      // Handle arrays
-      return value.map((item) => serializeValue(item))
-    } else {
-      const proto = Object.getPrototypeOf(value)
-      if (proto === Object.prototype || proto === null) {
-        // Plain objects
-        const serialized: Record<string, unknown> = {}
-        for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-          serialized[k] = serializeValue(v)
-        }
-        return serialized
-      }
-      // Non-plain object (Map, Set, class instance, …): not round-trippable to
-      // a story arg nor reliably cloneable over RPC. Mark it (read-only in the
-      // UI) rather than leaking the live object onto the wire.
-      return {
-        __isObject: true,
-        name:
-          (value as { constructor?: { name?: string } }).constructor?.name ||
-          'Object',
-      }
-    }
-  }
-
-  // Handle functions - return a placeholder
-  if (typeof value === 'function') {
-    return {
-      __isFunction: true,
-      name: (value as { name?: string }).name || 'anonymous',
-    }
-  }
-
-  // Primitives pass through
-  return value
-}
 
 function serializeProps(props: Record<string, unknown>) {
   const serialized: Record<string, unknown> = {}

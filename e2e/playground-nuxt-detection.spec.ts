@@ -110,6 +110,13 @@ test.describe('Nuxt SSR playground detection coverage', () => {
 
     expect(snapshot).toBeTruthy()
     expect(snapshot?.hasUnknownFilePath).toBe(false)
+    const dependencyComponents = await page.evaluate(() =>
+      Array.from((window as any).__componentHighlighterRegistry.values())
+        .map((entry: any) => entry.meta.filePath as string)
+        .filter((file: string) => file.replaceAll('\\', '/').includes('/node_modules/')),
+    )
+    expect(dependencyComponents).toEqual([])
+    expect(snapshot?.uniqueNames.some((name: string) => name.startsWith('NuxtDevtools'))).toBe(false)
     expect(snapshot?.uniqueNames).toEqual(
       expect.arrayContaining([
         'Header',

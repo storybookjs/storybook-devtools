@@ -13,7 +13,7 @@ Dev-server devtools for visual component highlighting and automatic Storybook st
 - **DevTools Integration** - Dock panel with Storybook, Component Highlighter, Coverage, and About tabs
 - **Coverage Dashboard** - Track story coverage across all detected components using the Storybook index, refreshed after story-file edits on every host
 - **Copy Prompt** - Copy LLM-friendly component context to clipboard for AI-assisted development
-- **Development Only** - Never runs in production builds
+- **Development Only** - Instrumentation is disabled in production builds unless explicitly forced
 - **Keyboard Shortcuts** - Quick toggles and navigation
 
 ## Installation
@@ -73,7 +73,7 @@ export default defineConfig({
 > On Vite >= 8.3, setting `devtools: { enabled: true }` in the Vite config
 > makes Vite mount `@vitejs/devtools` itself. Use either that option or the
 > `DevTools()` plugin, not both — registering both fails with `DTK0034`.
-> Nuxt is the exception: it needs the explicit `DevTools()` plugin.
+> The verified Nuxt 4.5 setup also supports the native option.
 >
 > Storybook's own Vite builder loads this same config file when it runs, so
 > both the `DevTools()` plugin above and `devtools: { enabled: true }` need
@@ -83,9 +83,10 @@ export default defineConfig({
 
 ### Nuxt SSR
 
+The configuration below is verified with Nuxt 4.5.2.
+
 ```typescript
 // nuxt.config.ts
-import { DevTools } from '@vitejs/devtools'
 import { defineNuxtConfig } from 'nuxt/config'
 import componentHighlighter, {
   getNuxtDevToolsHookScript,
@@ -119,7 +120,7 @@ export default defineNuxtConfig({
       enabled: true,
       clientAuth: false,
     },
-    plugins: [DevTools(), componentHighlighter()],
+    plugins: [componentHighlighter()],
   },
 })
 ```
@@ -129,8 +130,12 @@ the DevTools dock and its assets are reachable through Nuxt's dev server, and
 add both head scripts so the highlighter is wired up before and after
 hydration. Pin `vite.server.host` if the page and the DevTools websocket need
 to agree on a host (for example `127.0.0.1`). When running Storybook for Nuxt
-components, omit the module, the DevTools plugin, the component highlighter
-plugin, and the head scripts from the Storybook process.
+components, disable `vite.devtools.enabled` and omit the module, the component
+highlighter plugin, and the head scripts from the Storybook process.
+
+Older Nuxt builders (including 4.2.1) needed an explicit `DevTools()` plugin
+because they did not forward Vite's native option. Do not keep that explicit
+plugin when upgrading to the verified Nuxt 4.5 setup; it registers DevTools twice.
 
 ### Vite (unified entry)
 
@@ -261,9 +266,10 @@ Once the dock is active:
 
 ### Highlight Colors
 
-- **Pink solid border** - currently hovered component
-- **Pink dashed border** - other instances of the same component type
-- **Pink background (20%)** - selected component (context menu open)
+- **Blue solid border** - hovered component without stories
+- **Pink solid border** - hovered component with stories
+- **Dashed border** - other instances of the same component type
+- **Tinted background** - selected component
 
 ### Context Menu and Story Creation
 
@@ -279,9 +285,9 @@ variant, size, type), then click **Create** for a story with the current
 props, or **Create with Interactions** to record clicks/typing/selections
 first and generate a story with a play function.
 
-The story file is created at `<component-dir>/<ComponentName>.stories.{ts,tsx}` (`.ts` for Vue, `.tsx` for React). If the file already exists, a new named export is appended to it on the CSF syntax tree via Storybook's own `csf-tools`, so the rest of the file — comments, quote style, formatting — is left byte-identical, the export name is deduplicated against everything the file already declares, and imports the new story needs are merged into matching existing import statements. A story file that Storybook cannot parse as CSF still gets the new export, appended as text.
+The story file is created at `<component-dir>/<ComponentName>.stories.{ts,tsx}` (`.ts` for Vue, `.tsx` for React). If the file already exists, a new named export is appended to it on the CSF syntax tree via Storybook's own `csf-tools`, so existing statements and comments are preserved when printing, the export name is deduplicated against everything the file already declares, and imports the new story needs are merged into matching existing import statements. A story file that Storybook cannot parse as CSF still gets the new export, appended as text.
 
-Generated files are formatted with your project's prettier when you have one installed.
+Generated files are formatted with your project's prettier when you have one installed; this final formatting step can also reformat existing statements.
 
 ### Stories and Docs
 
@@ -541,9 +547,18 @@ breakdown.
 
 ### Components not being highlighted
 
-1. Ensure the file matches the `include` patterns
-2. Check that it's not matching an `exclude` pattern
-3. For Vue, ensure the component has a `<script setup>` or `<script>` block
+1. Activate **Component Highlighter** in the dock and complete the host's authorization prompt if shown
+2. Ensure the file matches `include` and does not match `exclude`
+3. For React, use exported, named PascalCase components; in RSC mode the file must have its own `"use client"` directive
+4. For Vue, ensure the component has a `<script setup>` or `<script>` block
+
+### Duplicate editor RPC registration (`DF0021`)
+
+The Vite adapter reuses the editor service supplied by Vite DevTools' Messages
+plugin. It falls back to Vite's `/__open-in-editor` endpoint when that service
+is absent. Registering the service again after Devframe 1.1.0 initializes can
+race its existing installation. Rsbuild, Next, and standalone devframes declare
+the service before their shared initialization barrier.
 
 ### Story generation produces wrong imports
 
@@ -559,7 +574,12 @@ git clone https://github.com/storybookjs/vite-plugin-experimental-storybook-devt
 cd vite-plugin-experimental-storybook-devtools
 
 pnpm install
+pnpm build
 ```
+
+Use Node 24 and the pnpm version pinned in `package.json` for repository
+development. Build before tests and playground startup: runtime tests, the
+panel, and the Next/Rsbuild hosts load `dist`.
 
 ### Available Scripts
 
@@ -583,12 +603,35 @@ pnpm test
 # Run E2E tests (starts playgrounds automatically)
 pnpm exec playwright test
 
+# Test real Storybook startup, disk writes, generated previews, and Docs
+# Keep port 6006 free; the suite restores story files and stops its own processes.
+pnpm exec playwright test --config=playwright.storybook.config.ts
+
 # Build the library
 pnpm build
 
 # Type check
 pnpm typecheck
 ```
+
+Before release, run `pnpm build`, `pnpm test --run`, `pnpm typecheck`, and both
+Playwright suites above. CI runs the same checks. The regular suite covers
+React 18/19, Vue, Nuxt SSR, Rsbuild, and Next, including the first dock click,
+live prop edits, and interaction recording with real form inputs. The serial
+Storybook suite verifies actual writes and previews; React 18 deliberately
+has no Storybook config and exercises the launch-failure UI instead.
+
+To leave existing local servers running, choose a free port range and Storybook
+URL for QA (the URL setting applies only to the playgrounds):
+
+```bash
+PLAYWRIGHT_PORT_OFFSET=20 pnpm exec playwright test
+PLAYWRIGHT_PORT_OFFSET=20 STORYBOOK_E2E_URL=http://localhost:6007 \
+  pnpm exec playwright test --config=playwright.storybook.config.ts
+```
+
+Run the serial Storybook suite separately from unit tests and other browser
+suites: it temporarily changes shared playground story files.
 
 ## License
 
