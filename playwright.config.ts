@@ -11,7 +11,9 @@ export default defineConfig({
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  // Parallelize independent hosts without saturating the CI runner.
+  // The disk-writing Storybook suite overrides this back to one worker.
+  workers: process.env.CI ? 2 : undefined,
   reporter: 'html',
   use: {
     trace: 'on-first-retry',

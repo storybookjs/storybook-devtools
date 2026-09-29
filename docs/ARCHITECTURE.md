@@ -773,8 +773,10 @@ pnpm exec playwright test -g "listeners-ready registry replay"
 ```
 
 Playwright runs tests within each playground sequentially because panel RPC
-and shared state are server-global. Different playground projects can still
-run concurrently. Close active inspector previews on test ports, or use
+and shared state are server-global. CI uses two workers to run independent
+playground projects concurrently. The disk-writing Storybook integration
+suite explicitly retains one worker because hosts share story files and a
+Storybook port. Close active inspector previews on test ports, or use
 isolated playground ports, to prevent manual sessions from changing test state.
 
 CI builds first, then runs unit tests, typechecking, the regular browser suite,

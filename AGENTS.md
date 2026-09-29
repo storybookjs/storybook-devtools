@@ -233,6 +233,9 @@ finds no files); run them through a config with a top-level `storybookTest`
 plugin when a change needs that check.
 
 CI runs the build, unit tests, typecheck, and both browser suites on Node 24.
+The regular browser suite uses two CI workers across independent hosts;
+tests within a host stay sequential. Keep the disk-writing Storybook suite
+at one worker because hosts share story files and the Storybook port.
 Shared E2E suites are registered by playground specs; select them with `-g`
 or a playground spec path, not the shared suite's `.ts` filename.
 
