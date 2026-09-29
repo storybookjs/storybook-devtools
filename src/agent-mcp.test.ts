@@ -4,7 +4,7 @@ import { createRuntimeMcp } from './agent-mcp'
 import type { CreateStorybookDevframeDeps } from './context'
 
 describe('runtime MCP boundary', () => {
-  it('isolates hub tools and state, and enforces bearer and origin checks', async () => {
+  it.each([undefined, 'test-token'])('isolates hub tools and state with optional token %s', async (token) => {
     const ctx = await createHostContext({
       cwd: '/app', mode: 'dev',
       host: { mountStatic() {}, resolveOrigin: () => 'http://localhost', getStorageDir: () => '/tmp' },
@@ -16,15 +16,18 @@ describe('runtime MCP boundary', () => {
       storyIndexService: { cwd: '/app', getIndex: async () => ({ v: 5, entries: {}, source: 'storybook' }) },
     } as unknown as CreateStorybookDevframeDeps
     await expect(createRuntimeMcp(ctx, deps, { token: ' ' })).rejects.toThrow('non-empty')
-    const mcp = await createRuntimeMcp(ctx, deps, { token: 'test-token' })
-    const request = (method: string, auth = 'Bearer test-token', origin = 'http://localhost') => mcp.fetch(new Request('http://localhost/mcp', {
-      method: 'POST', headers: { Authorization: auth, Origin: origin, 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
+    const mcp = token ? await createRuntimeMcp(ctx, deps, { token }) : await createRuntimeMcp(ctx, deps)
+    const request = (method: string, auth = token ? `Bearer ${token}` : '', origin = 'http://localhost') => mcp.fetch(new Request('http://localhost/mcp', {
+      method: 'POST', headers: { ...(auth ? { Authorization: auth } : {}), ...(origin ? { Origin: origin } : {}), 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method }),
     }))
     try {
-      expect((await request('tools/list', '')).status).toBe(401)
-      expect((await request('tools/list', 'Bearer wrong')).status).toBe(401)
+      if (token) {
+        expect((await request('tools/list', '')).status).toBe(401)
+        expect((await request('tools/list', 'Bearer wrong')).status).toBe(401)
+      }
       expect((await request('tools/list', 'Bearer test-token', 'https://untrusted.example')).status).toBe(403)
+      expect((await request('tools/list', '', '')).status).toBe(403)
       const response = await request('tools/list')
       expect(response.status).toBe(200)
       const text = await response.text()

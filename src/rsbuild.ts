@@ -288,7 +288,7 @@ export function storybookDevtoolsRsbuild(
           },
         })
 
-        if (pluginOptions.agent) {
+        if (pluginOptions.agent !== false) {
           const agentOptions = pluginOptions.agent
           const mcp = await createRuntimeMcp(await hub.context, deps, agentOptions)
           server.middlewares.use(runtimeMcpMiddleware(async () => mcp))

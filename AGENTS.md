@@ -192,8 +192,9 @@ Do not build concurrently with tests; the build clears that directory.
 
 Runtime MCP changes must also preserve the shared `e2e/common-agent-suite.ts`
 coverage on all six hosts: page-scoped identity, fresh snapshots, closed pages,
-read-only tool discovery, and authorization. The rendered component tree is
-React-only initially: verify ancestry, offscreen membership, stable IDs, modal
+read-only tool discovery with no `agent` option or bearer header, and Origin
+rejection. Protocol tests must also verify optional token enforcement. The rendered
+component tree is React-only initially: verify ancestry, offscreen membership, stable IDs, modal
 mount/unmount, and explicit unsupported Vue/Nuxt responses in the shared agent
 suite. Tree unit tests additionally cover
 portals, fragments, text output, transparent ancestors and truncation. Runtime

@@ -126,7 +126,7 @@ test('panel launch, real story writes and preview', async ({ page }, testInfo) =
     expect(recorded).toBeTruthy()
     // Prove the complementary Storybook MCP server is reachable on each
     // configured framework, independently of the application runtime MCP.
-    const mcp = await callMcp(page.request, `${storybookUrl}/mcp`, 'tools/list', {}, false)
+    const mcp = await callMcp(page.request, `${storybookUrl}/mcp`, 'tools/list')
     expect(mcp.tools.some((tool: any) => tool.name === 'get-storybook-story-instructions')).toBe(true)
     const preview = await page.context().newPage()
     await preview.goto(`${storybookUrl}/iframe.html?id=${recorded!.id}&viewMode=story`)
@@ -142,7 +142,7 @@ test('panel launch, real story writes and preview', async ({ page }, testInfo) =
     if (['react', 'vue', 'nuxt'].includes(host)) {
       const tested = await callMcp(page.request, `${storybookUrl}/mcp`, 'tools/call', {
         name: 'test-run', arguments: { stories: [{ storyId: recorded!.id }], a11y: false },
-      }, false)
+      })
       expect(tested.isError, JSON.stringify(tested)).not.toBe(true)
       const report = tested.content.map((item: { text?: string }) => item.text ?? '').join('\n')
       expect(report).toContain(`## Passing Stories\n\n- ${recorded!.id}`)

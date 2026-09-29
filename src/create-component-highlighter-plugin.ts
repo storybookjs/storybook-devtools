@@ -27,8 +27,8 @@ import type { SerializedRegistryInstance, RegistryDiff } from './shared-types'
 export type { SerializedRegistryInstance, RegistryDiff }
 
 export interface ComponentHighlighterOptions {
-  /** Opt in to read-only runtime MCP. Supply the same bearer token in the agent client. */
-  agent?: RuntimeAgentOptions
+  /** Read-only runtime MCP is enabled by default. Set false to disable, or supply an optional token. */
+  agent?: RuntimeAgentOptions | false
   /** URL of the Storybook instance */
   storybookUrl?: string
   /**
@@ -418,7 +418,7 @@ export function createComponentHighlighterPlugin(
   // here (against the kit-augmented `KitNodeContext`) rather than in the
   // devframe's own `setup(ctx)`. Runs after the devframe-level setup above.
   const kitSetup = async (ctx: KitNodeContext) => {
-    if (options.agent && ctx.viteServer) {
+    if (options.agent !== false && ctx.viteServer) {
       const mcp = await createRuntimeMcp(ctx, deps, options.agent)
       ctx.viteServer.middlewares.use(runtimeMcpMiddleware(async () => mcp))
       ctx.viteServer.httpServer?.once('close', () => { void mcp.dispose() })

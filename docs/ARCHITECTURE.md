@@ -437,15 +437,17 @@ replace there.
 
 ## Bundler hosts
 
-### Optional runtime MCP
+### Runtime MCP
 
 `src/agent.ts` defines four read-only tools: app context, exact instance
 inspection, rendered React component tree, and mounted story gaps. `src/agent-mcp.ts` serves Devframe's MCP
 adapter from an isolated agent context; its closures query the existing host
 RPC. No hub commands, write RPCs, or shared-state resources are exposed. The
-`agent` plugin option opts in with a bearer token; Next accepts it on its route
-factory. Vite/Nuxt/Rsbuild mount `/__storybook-devtools/mcp`; Next mounts
-`<hub-base>storybook-devtools/mcp`.
+`agent` plugin option defaults to enabled without a bearer token. Set it to
+`false` to disable, or supply `{ token }` to require authentication. Next accepts
+this option on its route factory. The loopback Origin gate remains enabled;
+Vite/Nuxt/Rsbuild additionally enforce a loopback socket peer. They mount
+`/__storybook-devtools/mcp`; Next mounts `<hub-base>storybook-devtools/mcp`.
 
 The runtime MCP adapter is imported lazily through `devframe/adapters/mcp`.
 Devframe 1.1 delegates to `@devframes/agentic`, declared as a runtime dependency

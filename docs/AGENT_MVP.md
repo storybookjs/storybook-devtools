@@ -3,29 +3,22 @@
 Runtime MCP answers questions about the application currently open in a browser.
 Storybook MCP supplies component documentation, story previews and tests. Use both.
 
-## Enable
+## Use
 
-Vite (React/Vue/Nuxt) and Rsbuild accept `agent` on the existing plugin:
-
-```ts
-componentHighlighter({
-  agent: { token: process.env.STORYBOOK_DEVTOOLS_MCP_TOKEN! },
-})
-```
-
-For Next, pass `agent` to `createStorybookDevtoolsRoute`, where the live RPC hub
-exists, rather than to `withStorybookDevtools`.
-
-Set a non-empty token in the dev-server environment. Configure an HTTP MCP
-client with the matching `Authorization: Bearer <token>` header and a loopback
-`Origin` header (for example `http://127.0.0.1:5173`). Endpoint paths:
+Runtime MCP is available automatically when the app's development server runs
+with Storybook DevTools. No `agent` option or bearer token is needed. Configure
+your MCP client once with the HTTP endpoint below and a loopback `Origin` header
+(for example `http://127.0.0.1:5173`). The repository's `.codex/config.toml`
+already supplies the React demo connection. This follows
+[Devframe's default local-caller trust model](https://devfra.me/adapters/mcp#origin-gate-and-opt-in-identity).
+Storybook itself does not need to be running to use runtime MCP.
 
 | Host | Application runtime MCP |
 | --- | --- |
 | Vite / Nuxt / Rsbuild | `/__storybook-devtools/mcp` on the app server |
 | Next | `/__devframes/storybook-devtools/mcp` (uses the configured hub base) |
 
-The feature is opt-in. The separate endpoint exposes only four read-only tools,
+The separate endpoint exposes only four read-only tools,
 without the hub's terminals, story-writing actions, or shared-state resources.
 It uses Devframe's `ctx.agent.registerTool` and `createMcpFetchHandler` with a
 dedicated agent context whose handlers query the existing application RPC hub.
@@ -38,8 +31,18 @@ and production routes return 404 without allocating a development sidecar.
 
 Open the app and authorize its DevTools connection before requesting runtime
 data. Connecting MCP alone cannot render the app or populate component data.
-Playgrounds use `playground-only` unless the environment overrides the token;
-that fixed value is for local examples/E2E, not shared environments.
+To disable runtime MCP, set `agent: false` on the Vite/Rsbuild plugin, or on
+`createStorybookDevtoolsRoute` for Next. To require a token explicitly:
+
+```ts
+componentHighlighter({
+  agent: { token: process.env.STORYBOOK_DEVTOOLS_MCP_TOKEN! },
+})
+```
+
+For Next, configure that option on `createStorybookDevtoolsRoute`. Only then must
+the MCP client send the matching `Authorization: Bearer <token>` header. The
+playgrounds intentionally use the default with no token or `agent` configuration.
 
 ## Agent workflow
 
@@ -138,7 +141,7 @@ discover its tools and argument schemas. Runtime MCP stays on the app server.
 ### Ready-to-use Codex demo
 
 This repository's `.codex/config.toml` connects the React demo's runtime MCP on
-6173 and Storybook MCP on 6016, with the local playground token. Start them in
+6173 and Storybook MCP on 6016, without a bearer token. Start them in
 separate terminals (after `pnpm build`):
 
 ```sh
@@ -147,8 +150,7 @@ BROWSER=none pnpm --dir playground/react storybook --port 6016
 ```
 
 Open `http://127.0.0.1:6173` and start a new Codex task/reload its MCP connections.
-Keep token overrides in the dev server and client configuration aligned. The
-project config uses the documented
+The project config uses the documented
 [Codex HTTP MCP configuration](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
 ## Evidence limits
@@ -180,11 +182,38 @@ project config uses the documented
 - This MVP does not create stories, edit props, or expose recordings. Those need
   separate action contracts and verified acknowledgments.
 - Vite/Nuxt/Rsbuild additionally require a loopback socket peer and bound request
-  bodies to 16 KiB. Next's Fetch route has no socket-peer API and relies on bearer
-  and Origin checks; run that dev server on loopback. Neither setup is intended
+  bodies to 16 KiB. Next's Fetch route has no socket-peer API and relies on the
+  Origin check by default; run that dev server on loopback. Its optional token
+  adds caller authentication. Neither setup is intended
   as a hosted, multi-user MCP service.
 
 ## Validation
+
+### Token-free local default (2026-09-29)
+
+Runtime MCP now mounts with no `agent` configuration and accepts local requests
+without a bearer header. `agent: false` disables it; an explicitly configured
+`agent.token` still requires the matching bearer. The protocol regression test
+failed before this change when creating the endpoint with omitted options, and
+passes afterward in both default and token-protected modes. Both modes retain
+Origin rejection and isolation from hub tools and shared-state resources.
+
+`pnpm build`, `pnpm typecheck`, and `pnpm test --run` passed (503 tests). The full
+browser suite passed 211 tests with all six playgrounds using no `agent` option
+and no MCP Authorization header:
+
+```sh
+PLAYWRIGHT_PORT_OFFSET=2000 STORYBOOK_E2E_URL=http://localhost:6026 pnpm exec playwright test --workers=2 --reporter=line
+```
+
+The serial Storybook integration suite also passed all six hosts:
+
+```sh
+PLAYWRIGHT_PORT_OFFSET=2000 STORYBOOK_E2E_URL=http://localhost:6026 pnpm exec playwright test --config=playwright.storybook.config.ts --reporter=line
+```
+
+A direct `tools/list` request to the React demo on port 6173 also returned HTTP
+200 and all four runtime tools without an Authorization header.
 
 ### Devframe 1.1 / current main integration (2026-09-29)
 
@@ -242,7 +271,8 @@ snapshots: schemas, annotations, no mutations/resources, page selection, missing
 instances, story matching, provenance and peer timeouts.
 `e2e/common-agent-suite.ts` exercises HTTP MCP through actual browser RPC on all
 six playgrounds, including selection, props, two-page isolation, close handling,
-and bearer rejection. The serial Storybook suite checks the separate Storybook
+without agent configuration or bearer headers, plus untrusted-Origin rejection.
+Protocol unit tests separately cover explicitly configured token rejection. The serial Storybook suite checks the separate Storybook
 MCP tool list while launching each configured framework, and executes the
 generated story through MCP `test-run` on React, Vue and Nuxt.
 

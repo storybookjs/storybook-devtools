@@ -1,9 +1,9 @@
 import { test, expect, type APIRequestContext } from '@playwright/test'
 import { clickComponentHighlight, enableHighlighting, disableHighlighting, exerciseTaskFormInteractions } from './highlighter-helpers'
 
-export async function callMcp(request: APIRequestContext, url: string, method: string, params: object = {}, runtime = true) {
+export async function callMcp(request: APIRequestContext, url: string, method: string, params: object = {}) {
   const response = await request.post(url, {
-    headers: { Origin: new URL(url).origin, Accept: 'application/json, text/event-stream', ...(runtime ? { Authorization: 'Bearer playground-only' } : {}) },
+    headers: { Origin: new URL(url).origin, Accept: 'application/json, text/event-stream' },
     data: { jsonrpc: '2.0', id: 1, method, params },
   })
   expect(response.status(), await response.text()).toBe(200)
@@ -70,8 +70,8 @@ export function registerAgentSuite() {
         const updated = await call('inspect-component', { pageId: target.pageId, instanceId: id })
         return updated.instance.serializedProps.count
       }).toBe(inspected.instance.serializedProps.count + 1)
-      const denied = await request.post(endpoint, { headers: { Origin: new URL(endpoint).origin }, data: { jsonrpc: '2.0', id: 1, method: 'tools/list' } })
-      expect(denied.status()).toBe(401)
+      const denied = await request.post(endpoint, { headers: { Origin: 'https://untrusted.example' }, data: { jsonrpc: '2.0', id: 1, method: 'tools/list' } })
+      expect(denied.status()).toBe(403)
     })
 
     test('returns the rendered React component tree with fresh modal membership', async ({ page, request, baseURL }, testInfo) => {

@@ -52,7 +52,6 @@ export default defineNuxtConfig({
       isStorybook
         ? null
         : componentHighlighter({
-            agent: { token: process.env['STORYBOOK_DEVTOOLS_MCP_TOKEN'] ?? 'playground-only' },
             storybookUrl: process.env.STORYBOOK_E2E_URL || 'http://localhost:6006',
             debugMode: false,
           }),

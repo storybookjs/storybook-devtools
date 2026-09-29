@@ -637,8 +637,8 @@ export function withStorybookDevtools(
 // ─── app/__devframes/[[...path]]/route.ts ─────────────────────────────────
 
 export interface CreateStorybookDevtoolsRouteOptions {
-  /** Opt in to read-only runtime MCP at <base>storybook-devtools/mcp. */
-  agent?: RuntimeAgentOptions
+  /** Read-only runtime MCP is enabled by default at <base>storybook-devtools/mcp. Set false to disable. */
+  agent?: RuntimeAgentOptions | false
   /** Gate the hub behind interactive auth. @default true */
   auth?: boolean
   /** Pin the side-car RPC/WS port (Next routes can't accept WS upgrades). */
@@ -758,7 +758,7 @@ export function createStorybookDevtoolsRoute(
 
   let mcp: Promise<RuntimeMcp> | undefined
   const handler = async (req: Request) => {
-    if (options.agent && new URL(req.url).pathname === `${base}storybook-devtools/mcp`) {
+    if (options.agent !== false && new URL(req.url).pathname === `${base}storybook-devtools/mcp`) {
       const agentOptions = options.agent
       mcp ??= hubReady
         .then(hub => hub.ready())
