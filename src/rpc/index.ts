@@ -1,5 +1,6 @@
 import type { SerializedRegistryInstance } from '../shared-types'
 import { checkStory } from './functions/check-story'
+import { createStories } from './functions/create-stories'
 import { createStory } from './functions/create-story'
 import { getConfig } from './functions/get-config'
 import { getCoverage } from './functions/get-coverage'
@@ -24,6 +25,7 @@ export const serverFunctions = [
   highlightTarget,
   toggleOverlay,
   createStory,
+  createStories,
   getCoverage,
   pushRegistryDiff,
   scrollToComponent,

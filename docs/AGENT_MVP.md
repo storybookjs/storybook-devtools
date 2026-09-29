@@ -30,7 +30,11 @@ without the hub's terminals, story-writing actions, or shared-state resources.
 It uses Devframe's `ctx.agent.registerTool` and `createMcpFetchHandler` with a
 dedicated agent context whose handlers query the existing application RPC hub.
 It does not rely on automatic MCP mounting, `devframe connect` discovery, or
-WebMCP. This accommodates the installed Devframe 0.9.12 / hub 0.9.5 APIs.
+WebMCP. The Devframe 1.1.0 adapter loads its implementation from `@devframes/agentic`,
+which this package declares as a runtime dependency. Keep the public imports
+from `devframe/adapters/mcp`; no direct SDK integration is needed.
+Next awaits the current hub startup promise before creating this isolated context,
+and production routes return 404 without allocating a development sidecar.
 
 Open the app and authorize its DevTools connection before requesting runtime
 data. Connecting MCP alone cannot render the app or populate component data.
@@ -115,14 +119,15 @@ results are priorities for investigation, not a complete coverage audit.
 
 ## Storybook MCP in this repository
 
-`@storybook/addon-mcp@10.6.0` is installed in all five playgrounds with Storybook.
+`@storybook/addon-mcp@11.0.0-alpha.1` is installed in all five playgrounds with Storybook.
 React 18 intentionally has no Storybook config and remains the fallback case.
 React 19 enables the experimental components manifest for documentation tools.
 Other renderers expose the toolsets their installed framework supports; addon
 presence does not imply documentation or test-runner support.
 React, Vue and Nuxt have separate `vitest.config.ts` files, so the Storybook
 `test-run` tool finds an actual browser test project without starting the app's
-DevTools plugins. The Next webpack and Rsbuild configurations do not expose this
+DevTools plugins. Storybook 11 supplies preview annotations through the test
+plugin, so these configs do not reference the removed `vitest.setup.ts` files. The Next webpack and Rsbuild configurations do not expose this
 Vitest test tool. See the [Storybook Vitest setup](https://storybook.js.org/docs/writing-tests/integrations/vitest-addon).
 
 From `playground/react`, run `pnpm storybook`. Storybook MCP is then available
@@ -137,8 +142,8 @@ This repository's `.codex/config.toml` connects the React demo's runtime MCP on
 separate terminals (after `pnpm build`):
 
 ```sh
-E2E_STORYBOOK_PORT=6016 pnpm --dir playground/react dev --host 127.0.0.1 --port 6173
-pnpm --dir playground/react storybook --port 6016 --no-open
+STORYBOOK_E2E_URL=http://localhost:6016 pnpm --dir playground/react dev --host 127.0.0.1 --port 6173
+BROWSER=none pnpm --dir playground/react storybook --port 6016
 ```
 
 Open `http://127.0.0.1:6173` and start a new Codex task/reload its MCP connections.
@@ -181,6 +186,32 @@ project config uses the documented
 
 ## Validation
 
+### Devframe 1.1 / current main integration (2026-09-29)
+
+Merged `main` at `a6a421e`, retaining the runtime tools and React tree. The
+runtime now declares `@devframes/agentic@1.1.0`; Storybook MCP playgrounds use
+`11.0.0-alpha.1` alongside the rest of Storybook. Next awaits the asynchronous
+hub startup, and skips all hub/sidecar setup in production. Dedicated browser
+Vitest configs use Storybook 11's preview setup without deleted setup files.
+
+Validated locally with Node `22.21.1` and pnpm `10.33.0` (CI uses Node 24):
+
+| Command | Result |
+| --- | --- |
+| `pnpm install --frozen-lockfile` | Passed |
+| `pnpm build` | Passed |
+| `pnpm test --run` | 502 passed, 40 files |
+| `pnpm typecheck` | Passed |
+| `PLAYWRIGHT_PORT_OFFSET=2000 STORYBOOK_E2E_URL=http://localhost:6026 pnpm exec playwright test --workers=2 --reporter=line` | 211 passed |
+| `PLAYWRIGHT_PORT_OFFSET=2000 STORYBOOK_E2E_URL=http://localhost:6026 pnpm exec playwright test --config=playwright.storybook.config.ts --reporter=line` | 6 passed |
+
+Regression assertions failed before the fixes: the MCP implementation dependency
+was undeclared, and constructing a production Next route still allocated a
+sidecar port. Both pass afterward. Interactive React verification opened the
+coverage inspector on TaskList (`count: 3`); HTTP MCP returned matching props
+and a 26-node React tree containing three TaskCards. The serial suite also
+executed the generated interaction story through MCP on React, Vue and Nuxt.
+
 The React tree extension has five traversal unit tests covering fragments,
 portals, transparent ancestors, text/null output, multiple roots, connection
 changes and bounded output. Protocol tests cover tree responses, unsupported
@@ -190,7 +221,7 @@ stable IDs and modal mount/unmount on all four React hosts, plus explicit
 unsupported responses on Vue/Nuxt. Portal/fragment edge cases are unit fixtures,
 not additional browser fixtures.
 
-React tree validation (2026-09-17):
+Historical React tree validation (2026-09-17, before the Devframe 1.1 / Storybook 11 migration; the old E2E environment names below no longer apply):
 
 | Command | Result |
 | --- | --- |
@@ -215,8 +246,8 @@ and bearer rejection. The serial Storybook suite checks the separate Storybook
 MCP tool list while launching each configured framework, and executes the
 generated story through MCP `test-run` on React, Vue and Nuxt.
 
-Build before tests. If standard ports are occupied, set `E2E_PORT_OFFSET=1000`
-for either Playwright command to use 6173–6178. Set `E2E_STORYBOOK_PORT=6016` to
+Build before tests. If standard ports are occupied, set `PLAYWRIGHT_PORT_OFFSET=1000`
+for either Playwright command to use 6173–6178. Set `STORYBOOK_E2E_URL=http://localhost:6016` to
 move the serial suite's Storybook server too. Keep the chosen port free.
 
 ### Validation observations

@@ -1,5 +1,5 @@
 import * as path from 'path'
-import type { ResolvedConfig, Plugin } from 'vite'
+import type { ResolvedConfig, Plugin, UserConfig } from 'vite'
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 
 const createStoryIndexServiceMock = vi.fn((_options: unknown) => ({
@@ -17,6 +17,22 @@ vi.mock('./story-index', () => ({
 describe('createComponentHighlighterPlugin', () => {
   beforeEach(() => {
     createStoryIndexServiceMock.mockClear()
+  })
+
+  it('resolves optimized client dependencies from the plugin in non-hoisted consumers', async () => {
+    const { reactFramework } = await import('./frameworks/react')
+    const { createComponentHighlighterPlugin } = await import('./create-component-highlighter-plugin')
+    const plugin = createComponentHighlighterPlugin(reactFramework)[0]!
+    const configure = plugin.config as (config: UserConfig) => void
+    const config: UserConfig = {}
+    configure(config)
+    for (const dependency of ['xstate', 'nanoevents', '@medv/finder', 'dom-accessibility-api']) {
+      expect(config.optimizeDeps!.include).toContain(`@storybook/experimental-devtools > ${dependency}`)
+      expect(config.optimizeDeps!.include).not.toContain(dependency)
+    }
+    expect(config.optimizeDeps!.include).toContain(
+      'storybook/internal/csf/csf-utils',
+    )
   })
 
   it('builds the story-index service from the resolved Vite root, not process.cwd()', async () => {

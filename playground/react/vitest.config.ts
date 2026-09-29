@@ -14,6 +14,5 @@ export default defineConfig({
       provider: playwright(),
       instances: [{ browser: 'chromium' }],
     },
-    setupFiles: [fileURLToPath(new URL('.storybook/vitest.setup.ts', import.meta.url))],
   },
 })

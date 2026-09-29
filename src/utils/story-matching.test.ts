@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { storyNameFromExport, toId } from 'storybook/internal/csf/csf-utils'
 import {
+  findDocsEntry,
   findStoryCandidates,
   pickStoryId,
   stripExtForMatch,
@@ -100,6 +101,57 @@ describe('findStoryCandidates', () => {
     expect(findStoryCandidates(entries, 'src/components/TaskForm.vue')).toEqual(
       [],
     )
+  })
+})
+
+describe('component test entries (subtype: "test")', () => {
+  // Storybook nests `subtype: 'test'` entries under their parent story in the
+  // sidebar and leaves them out of component entry selection, so they are not
+  // stories a component "has" or a user can be sent to.
+  const story: StoryIndexEntryLike = {
+    id: 'button--primary',
+    type: 'story',
+    subtype: 'story',
+    name: 'Primary',
+    exportName: 'Primary',
+    title: 'Button',
+    importPath: './src/Button.stories.tsx',
+    componentPath: './src/Button.tsx',
+  }
+  const test: StoryIndexEntryLike = {
+    ...story,
+    id: 'button--primary:clicks',
+    subtype: 'test',
+    name: 'Clicks',
+    exportName: 'Clicks',
+  }
+
+  it('leaves them out of the stories a component has', () => {
+    const found = findStoryCandidates(index(story, test), 'src/Button.tsx')
+    expect(found.map((e) => e.id)).toEqual(['button--primary'])
+  })
+
+  it('does not count a component with only test entries as having a story', () => {
+    expect(findStoryCandidates(index(test), 'src/Button.tsx')).toEqual([])
+  })
+
+  it('never navigates to a test entry, even when its name matches', () => {
+    expect(
+      pickStoryId(index(story, test), 'src/Button.tsx', 'Clicks', {
+        requirePreferred: true,
+      }),
+    ).toBeNull()
+    expect(pickStoryId(index(test, story), 'src/Button.tsx')).toBe(
+      'button--primary',
+    )
+  })
+
+  it('keeps entries without a subtype (older indexes) as stories', () => {
+    const legacy = { ...story }
+    delete legacy.subtype
+    expect(
+      findStoryCandidates(index(legacy), 'src/Button.tsx').map((e) => e.id),
+    ).toEqual(['button--primary'])
   })
 })
 
@@ -294,5 +346,105 @@ describe('pickStoryId', () => {
     expect(
       pickStoryId(taskFormIndex, 'src/components/Modal.vue', 'Anything'),
     ).toBeNull()
+  })
+})
+
+describe('findDocsEntry', () => {
+  // Shapes verified against a real Storybook 10.6.0 index.json (addon-docs):
+  // autodocs entries carry the stories file's own `importPath`/`title` and
+  // an empty `storiesImports`; attached-MDX entries carry the MDX file's
+  // own `importPath` and list the stories file(s) they document in
+  // `storiesImports`.
+  const badgeStory: StoryIndexEntryLike = {
+    id: 'components-badge--inprogress',
+    type: 'story',
+    subtype: 'story',
+    name: 'Inprogress',
+    title: 'components/Badge',
+    importPath: './src/components/Badge.stories.tsx',
+    componentPath: './src/components/Badge.tsx',
+    tags: ['dev', 'test', 'manifest', 'autodocs'],
+    exportName: 'Inprogress',
+  } as StoryIndexEntryLike
+  const badgeAutodocs: StoryIndexEntryLike = {
+    id: 'components-badge--docs',
+    type: 'docs',
+    name: 'Docs',
+    title: 'components/Badge',
+    importPath: './src/components/Badge.stories.tsx',
+    tags: ['dev', 'test', 'manifest', 'autodocs'],
+    storiesImports: [],
+  }
+
+  const inputStory: StoryIndexEntryLike = {
+    id: 'components-input--empty',
+    type: 'story',
+    subtype: 'story',
+    name: 'Empty',
+    title: 'Components/Input',
+    importPath: './src/components/Input.stories.tsx',
+    componentPath: './src/components/Input.tsx',
+    tags: ['dev', 'test', 'manifest'],
+    exportName: 'Empty',
+  } as StoryIndexEntryLike
+  const inputAttachedMdx: StoryIndexEntryLike = {
+    id: 'components-input--docs',
+    type: 'docs',
+    name: 'Docs',
+    title: 'Components/Input',
+    importPath: './src/components/Input.mdx',
+    storiesImports: ['./src/components/Input.stories.tsx'],
+    tags: ['dev', 'test', 'manifest', 'attached-mdx'],
+  }
+
+  const unattachedMdx: StoryIndexEntryLike = {
+    id: 'design-tokens--docs',
+    type: 'docs',
+    name: 'Docs',
+    title: 'Design Tokens',
+    importPath: './src/DesignTokens.mdx',
+    storiesImports: [],
+    tags: ['dev', 'test', 'manifest', 'unattached-mdx'],
+  }
+
+  it('matches an autodocs entry by the shared importPath', () => {
+    const entries = index(badgeStory, badgeAutodocs)
+    const candidates = findStoryCandidates(entries, 'src/components/Badge.tsx')
+    expect(findDocsEntry(entries, candidates)?.id).toBe('components-badge--docs')
+  })
+
+  it('matches an attached-mdx entry via storiesImports', () => {
+    const entries = index(inputStory, inputAttachedMdx)
+    const candidates = findStoryCandidates(entries, 'src/components/Input.tsx')
+    expect(findDocsEntry(entries, candidates)?.id).toBe('components-input--docs')
+  })
+
+  it('prefers the attached-mdx entry over an autodocs entry for the same component', () => {
+    const attachedForBadge: StoryIndexEntryLike = {
+      ...inputAttachedMdx,
+      id: 'components-badge--docs-mdx',
+      importPath: './src/components/Badge.mdx',
+      storiesImports: ['./src/components/Badge.stories.tsx'],
+    }
+    const entries = index(badgeStory, badgeAutodocs, attachedForBadge)
+    const candidates = findStoryCandidates(entries, 'src/components/Badge.tsx')
+    expect(findDocsEntry(entries, candidates)?.id).toBe('components-badge--docs-mdx')
+  })
+
+  it('ignores unattached-mdx docs entries', () => {
+    const entries = index(badgeStory, unattachedMdx)
+    const candidates = findStoryCandidates(entries, 'src/components/Badge.tsx')
+    expect(findDocsEntry(entries, candidates)).toBeNull()
+  })
+
+  it('returns null when the component has no stories (and thus no docs)', () => {
+    const entries = index(badgeStory, badgeAutodocs)
+    expect(findDocsEntry(entries, [])).toBeNull()
+  })
+
+  it('returns null when a component has stories but no docs entry', () => {
+    const entries = index(badgeStory)
+    const candidates = findStoryCandidates(entries, 'src/components/Badge.tsx')
+    expect(findDocsEntry(entries, candidates)).toBeNull()
   })
 })

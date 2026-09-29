@@ -159,11 +159,13 @@ export function createStoryIndexService(
       // means supplying an equivalent one.
       const csfIndexer = {
         test: CSF_STORY_FILE_PATTERN,
-        createIndex: async (fileName: string, opts: IndexerOptions) =>
-          loadCsf(await readFile(fileName, 'utf8'), {
-            ...opts,
-            fileName,
-          }).parse().indexInputs,
+        createIndex: async (fileName: string, opts: IndexerOptions) => {
+          const code = await readFile(fileName, 'utf8')
+          // An empty story file has no default export, which `parse()`
+          // rejects — and one rejected file fails the whole index.
+          if (code.trim().length === 0) return []
+          return loadCsf(code, { ...opts, fileName }).parse().indexInputs
+        },
       }
 
       // `StoryIndexGenerator.findMatchingFilesCache` is a static Map shared

@@ -4,6 +4,12 @@
  * and appends the story — on the CSF AST via `storybook/internal/csf-tools`
  * rather than by splicing strings.
  *
+ * The appended export follows the *file's* format, whatever the project's
+ * preview says: `export const X = <meta>.story({...})` in a CSF factory
+ * file (using that file's own meta variable), and a CSF3 object export in
+ * a CSF3 file, typed the way its existing stories are. A file never ends up
+ * with both, which `CsfFile` rejects as a mixed-factory error.
+ *
  * Only the *file* half lives here. Turning live props into story source
  * (`generateArgsContent`, `formatPropValue`, JSX/slot handling) stays in
  * `story-generator.ts`: csf-tools has no equivalent, its `save-story` flow
@@ -18,7 +24,7 @@
  * native one fails the whole AST path.
  */
 import type { types as t } from 'storybook/internal/babel'
-import { escapeRegex } from './story-generator'
+import { escapeRegex, renderStoryExport, type ExportStyle } from './story-generator'
 
 type BabelTypes = typeof t
 
@@ -37,8 +43,11 @@ export interface CsfWriteRequest {
   existingCode: string
   /** Path of the story file, used for CSF diagnostics and formatting. */
   fileName: string
-  /** Rendered `export const <desiredExportName>: Story = { ... };` block. */
-  storyExportSource: string
+  /**
+   * Object literal of the story, e.g. `{ args: { label: 'Go' } }`. The
+   * writer wraps it in the export the target file's format calls for.
+   */
+  storyObjectSource: string
   desiredExportName: string
   requiredImports: CsfImportRequest[]
 }
@@ -55,13 +64,20 @@ export interface CsfWriteResult {
 }
 
 /**
- * Recast (the AST path) and the regex fallback both work in LF and only
- * emit '\n'. Convert back to '\r\n' when the original file used it, without
- * doubling any '\r\n' the printer already reproduced verbatim from source.
+ * The line ending a file uses: CRLF when most of its line breaks are CRLF,
+ * LF otherwise. Printers disagree on their default (recast uses `os.EOL` on
+ * Storybook 10 and always LF on Storybook 11), so the output is normalised
+ * to the existing file's style rather than to whatever the printer emitted.
  */
-function restoreCrlf(code: string, originalCode: string): string {
-  if (!originalCode.includes('\r\n')) return code
-  return code.replace(/\r?\n/g, '\r\n')
+function detectLineEnding(code: string): '\r\n' | '\n' {
+  const crlf = (code.match(/\r\n/g) ?? []).length
+  const lf = (code.match(/\n/g) ?? []).length - crlf
+  return crlf > lf ? '\r\n' : '\n'
+}
+
+/** Rewrite every line break in `code` to `lineEnding`. */
+function normalizeLineEndings(code: string, lineEnding: '\r\n' | '\n'): string {
+  return code.replace(/\r?\n/g, lineEnding)
 }
 
 /** Pick the quote style recast should use for nodes it has to print fresh. */
@@ -69,6 +85,49 @@ function detectQuoteStyle(code: string): 'single' | 'double' {
   const single = (code.match(/from '[^']*'/g) ?? []).length
   const double = (code.match(/from "[^"]*"/g) ?? []).length
   return double > single ? 'double' : 'single'
+}
+
+/**
+ * The export style of a parsed CSF file: factory when `CsfFile` recognised a
+ * `preview.meta(...)` call, otherwise CSF3 typed like its existing stories —
+ * the first story's annotation or `satisfies` clause, else the `Story` type
+ * alias when the file declares one, else untyped.
+ */
+function detectExportStyle(
+  t: BabelTypes,
+  csf: {
+    _metaIsFactory?: boolean | undefined
+    _metaVariableName?: string | undefined
+    _storyExports: Record<string, t.Node>
+    _ast: { program: t.Program }
+  },
+  code: string,
+): ExportStyle {
+  if (csf._metaIsFactory) {
+    return { kind: 'factory', metaName: csf._metaVariableName ?? 'meta' }
+  }
+  // Recast parses line-ending-normalised text, so node offsets index the LF
+  // form of the source.
+  const lfCode = code.replace(/\r\n/g, '\n')
+  const sourceOf = (node: t.Node): string | undefined =>
+    node.start != null && node.end != null ? lfCode.slice(node.start, node.end) : undefined
+  for (const story of Object.values(csf._storyExports)) {
+    if (!t.isVariableDeclarator(story)) continue
+    const annotation = t.isIdentifier(story.id) && t.isTSTypeAnnotation(story.id.typeAnnotation)
+      ? sourceOf(story.id.typeAnnotation.typeAnnotation)
+      : undefined
+    if (annotation) return { kind: 'csf3', annotation }
+    if (t.isTSSatisfiesExpression(story.init)) {
+      const satisfies = sourceOf(story.init.typeAnnotation)
+      if (satisfies) return { kind: 'csf3', satisfies }
+    }
+  }
+  const declaresStoryType = csf._ast.program.body.some(statement => {
+    const node = t.isExportNamedDeclaration(statement) ? statement.declaration : statement
+    return (t.isTSTypeAliasDeclaration(node) || t.isTSInterfaceDeclaration(node)) &&
+      node.id.name === 'Story'
+  })
+  return declaresStoryType ? { kind: 'csf3', annotation: 'Story' } : { kind: 'csf3' }
 }
 
 function uniqueExportName(taken: Set<string>, desired: string): string {
@@ -218,7 +277,7 @@ function renameExport(
 }
 
 /**
- * Append `storyExportSource` to `existingCode`, returning the full file
+ * Append the story to `existingCode`, returning the full file
  * content and the export name that was actually used.
  */
 export async function writeStoryIntoCsf(
@@ -245,7 +304,10 @@ export async function writeStoryIntoCsf(
     const exportName = uniqueExportName(new Set([...taken, ...requiredNames]), desiredExportName)
 
     // Keep snippet line numbers for recast's inter-statement spacing.
-    const snippet = babelParse(`\n\n${request.storyExportSource.trimStart()}`)
+    const style = detectExportStyle(t, csf, existingCode)
+    const snippet = babelParse(
+      `\n\n${renderStoryExport(style, desiredExportName, request.storyObjectSource)}`,
+    )
     renameExport(t, snippet.program, desiredExportName, exportName)
     const snippetBindings = new Set<string>()
     traverse(snippet, {
@@ -275,11 +337,15 @@ export async function writeStoryIntoCsf(
     })
     program.body.push(...snippet.program.body)
 
-    const { code } = printCsf(csf, { quote: detectQuoteStyle(existingCode) })
+    const lineEnding = detectLineEnding(existingCode)
+    const { code } = printCsf(csf, {
+      quote: detectQuoteStyle(existingCode),
+      lineTerminator: lineEnding,
+    })
     babelParse(code)
     const withTrailingNewline = code.endsWith('\n') ? code : `${code}\n`
     return {
-      code: restoreCrlf(withTrailingNewline, existingCode),
+      code: normalizeLineEndings(withTrailingNewline, lineEnding),
       exportName,
     }
   } catch (error) {
@@ -299,7 +365,7 @@ export async function writeStoryIntoCsf(
 function appendWithRegex(
   request: CsfWriteRequest,
 ): Pick<CsfWriteResult, 'code' | 'exportName'> {
-  const { existingCode: code, desiredExportName, storyExportSource } = request
+  const { existingCode: code, desiredExportName, storyObjectSource } = request
 
   const taken = new Set<string>()
   const storyExportRegex = /export\s+const\s+(\w+)\s*[=:]/g
@@ -354,13 +420,20 @@ function appendWithRegex(
     }
   }
 
-  const story = storyExportSource.replace(
-    `export const ${desiredExportName}`,
-    `export const ${exportName}`,
-  )
+  // Last-resort text detection of a factory file (`const meta =
+  // preview.meta(`): the export must match the file's format even when
+  // `CsfFile` could not parse it.
+  const factoryMeta = code.match(/\b(?:const|let)\s+(\w+)\s*=\s*\w+[^\n;]*?\.meta\s*\(/)
+  const style: ExportStyle = factoryMeta?.[1]
+    ? { kind: 'factory', metaName: factoryMeta[1] }
+    : { kind: 'csf3', annotation: 'Story' }
+  const story = renderStoryExport(style, exportName, storyObjectSource)
 
   return {
-    code: restoreCrlf(`${updated.trimEnd()}\n\n${story.trim()}\n`, code),
+    code: normalizeLineEndings(
+      `${updated.trimEnd()}\n\n${story.trim()}\n`,
+      detectLineEnding(code),
+    ),
     exportName,
   }
 }

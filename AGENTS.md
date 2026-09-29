@@ -37,6 +37,11 @@ Read `docs/ARCHITECTURE.md` early for implementation/refactor tasks.
      (`src/frameworks/react/transform.test.ts` → "RSC mode");
      `e2e/playground-next-detection.spec.ts` covers the runtime registry.
    - React 18 and 19 are both required and both E2E-gated.
+   - `playground/vue` is the CSF-factories project (`definePreview` in
+     `.storybook/preview.ts`); the other Storybook playgrounds (react,
+     rsbuild, next, nuxt) stay on CSF3 so both generated formats keep E2E
+     coverage. The React playgrounds share one `src` tree but each has its
+     own `.storybook`, so they must all use the same story format.
    - Keep `docs/SUPPORTED_FRAMEWORKS.md` current.
 
 3. **Use shared test primitives**
@@ -92,17 +97,24 @@ const shadow = dock?.shadowRoot;
 const buttons = shadow?.querySelectorAll('button');
 // Click by title: btn.title === 'Storybook' or 'Component Highlighter'
 
-// Access the panel iframe (Storybook/Coverage/Terminal/Docs tabs)
+// Access the panel iframe (Storybook/Component Highlighter/Coverage/About tabs)
 const iframe = shadow?.querySelector('iframe');
 const iframeDoc = iframe?.contentDocument;
 
-// Interact with panel tab buttons
-iframeDoc?.querySelectorAll('.tab-btn');  // click by textContent
+// Interact with panel rail buttons (top-level tabs)
+iframeDoc?.querySelectorAll('.rail-btn');  // click by .title, e.g. 'Component Highlighter', 'Coverage'
 
 // Panel-specific elements
 iframeDoc?.getElementById('highlight-toggle');  // highlight mode toggle
-iframeDoc?.querySelectorAll('tr.row');           // coverage table rows
-iframeDoc?.querySelector('.act-btn.locate');      // scroll-to-component buttons
+iframeDoc?.querySelectorAll('.cov-item');        // coverage list rows
+iframeDoc?.querySelector('.cov-search');       // component name/path search
+iframeDoc?.querySelector('.cov-primary-action'); // Create story / View stories
+
+// Component detail tabs: Properties and Stories always; Docs only with an index entry
+iframeDoc?.querySelector('#hl-properties-tab');       // Properties tab
+iframeDoc?.querySelector('#hl-stories-tab-stories');  // Stories tab
+iframeDoc?.querySelector('#hl-stories-tab-docs');     // Docs tab
+iframeDoc?.querySelector('#hl-stories-panel-docs iframe.hl-docs-iframe');  // embedded docs page
 ```
 
 ### Authorization
@@ -123,7 +135,8 @@ ctx.rpc.requestTrustWithToken(token);
 
 ### What to verify
 
-- Coverage tab: components show correct visible/not-visible status
+- Coverage tab: lists currently connected components in Needs stories / Has stories;
+  search filters name/path, row names open Properties, View stories opens Stories
 - Coverage `hasStory` decision: matches a real Storybook story index
   (custom titles, stories outside the component's directory) rather than
   only a sibling `Name.stories.*` file; falls back to the sibling-file
@@ -131,10 +144,31 @@ ctx.rpc.requestTrustWithToken(token);
   (`src/story-index.ts`, `src/coverage-dashboard.ts`)
 - Hover on coverage rows: highlight overlays appear on app page (`[data-coverage-highlight]`)
 - Highlight toggle: `window.__componentHighlighterIsActive()` reflects state, cursor changes
+- First dock activation: click the real Component Highlighter button on a fresh
+  page, verify hover outlines, then close and reopen it. Automation enable hooks
+  bypass the lazy action-script lifecycle and cannot prove this behavior.
 - Scroll-to-component: locate button triggers scroll via RPC
-- Create story / Create all: stories created without errors
+- Create story / Generate all: stories created without errors; bulk creation
+  emits one summary notification, including the failure count
+- Notifications: compact Storybook styling in light and dark mode, with
+  working dismissal; Next/Rsbuild must mount the Messages plugin
+- About: documentation link is here, not in the rail
+- Hover outlines: blue without stories, pink with stories, dashed for siblings;
+  the name aligns with the component and the badge stays within the viewport
 - Live prop editing (React AND Vue): the pencil on a prop row edits the live app; reset restores the original
 - Registry sync: `(await ctx.rpc.sharedState.get('component-highlighter:registry')).value()` returns the synced instances
+- Story format: `playground/vue` (factory preview) gets
+  `preview.meta(...)` / `meta.story(...)` files for Create and Create with
+  Interactions, and appends to an existing CSF3 file stay CSF3; every other
+  playground writes CSF3 (`e2e/story-format-helpers.ts`, asserted in
+  `e2e/storybook-integration.spec.ts`)
+- Launch: "Start Storybook" never opens a browser tab (`BROWSER=none` in the
+  child env; Storybook 11 builds that dropped `--no-open` reject that flag)
+- Inspector tabs: Properties is the default for a new component instance;
+  Stories owns creation and previews. Docs appears only for a matching autodocs
+  or attached MDX entry. Verify arrows/Home/End, one lazy docs iframe retained
+  across tab switches and prop refreshes, and draft name preservation for the
+  same selection (`buildDetailTabs` in `src/panel/panel.ts`).
 
 ### Communication architecture
 
@@ -165,8 +199,8 @@ suite. Tree unit tests additionally cover
 portals, fragments, text output, transparent ancestors and truncation. Runtime
 MCP complements Storybook MCP; validate the latter through the serial suite below.
 If unrelated projects occupy the standard playground ports, set
-`E2E_PORT_OFFSET=1000` on the Playwright
-commands; this moves the app servers to 6173–6178. Set `E2E_STORYBOOK_PORT=6016`
+`PLAYWRIGHT_PORT_OFFSET=1000` on the Playwright
+commands; this moves the app servers to 6173–6178. Set `STORYBOOK_E2E_URL=http://localhost:6016`
 to move the serial suite's Storybook server too. Keep that port free.
 
 For Storybook peer, indexing, generation, or launcher changes, also run:
@@ -185,6 +219,13 @@ free before running it. React 18 has no
 `.storybook` config: it checks fallback coverage and the launch failure UI.
 The other five playgrounds must launch and render successfully.
 
+To isolate QA from running developer servers, set `PLAYWRIGHT_PORT_OFFSET`
+(for example `20`) and `STORYBOOK_E2E_URL` (for example
+`http://localhost:6007`). The former offsets all six playground ports and
+disables server reuse; the latter configures both playgrounds and integration
+assertions. Do not run this serial suite concurrently with unit tests or other
+browser suites: they read the same story fixtures that it temporarily mutates.
+
 The regular save-flow E2Es inspect emitted payloads; they do **not** prove
 that disk writes, Storybook indexing, or the generated preview work.
 When reviewing these paths, also cover concurrent saves, existing import
@@ -194,6 +235,24 @@ Webpack/rspack do not watch stories outside the app import graph; tests
 must edit files without manually calling `invalidate()` to verify refresh.
 
 Run the broader test set too when the change touches more than one area.
+
+### Storybook version
+
+Run validation against the Storybook 11 version pinned in the workspace
+(currently `11.0.0-alpha.1`), using `pnpm install --frozen-lockfile`.
+CI runs this same version without a version matrix or dependency re-pinning.
+
+React, Vue and Nuxt have dedicated `vitest.config.ts` files with a top-level
+`storybookTest` plugin so Storybook MCP can execute browser story tests.
+Storybook 11 supplies preview annotations through that plugin; do not reference
+the removed `.storybook/vitest.setup.ts` files.
+
+CI runs the build, unit tests, typecheck, and both browser suites on Node 24.
+The regular browser suite uses two CI workers across independent hosts;
+tests within a host stay sequential. Keep the disk-writing Storybook suite
+at one worker because hosts share story files and the Storybook port.
+Shared E2E suites are registered by playground specs; select them with `-g`
+or a playground spec path, not the shared suite's `.ts` filename.
 
 ## PR Hygiene
 

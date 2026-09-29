@@ -164,3 +164,114 @@ export const Default: Story = {
     expect(result.content).toMatchSnapshot()
   })
 })
+
+describe('vue generateStory — CSF factories', () => {
+  const factoryFormat = {
+    kind: 'factory' as const,
+    previewImport: '../../../.storybook/preview',
+  }
+
+  async function parse(source: string) {
+    const { loadCsf } = await import('storybook/internal/csf-tools')
+    return loadCsf(source, {
+      fileName: '/project/src/components/BaseButton.stories.ts',
+      makeTitle: (title: string) => title || 'Auto',
+    }).parse()
+  }
+
+  it('writes a new story file with preview.meta and meta.story, without Meta/StoryObj', async () => {
+    const result = await generateStory({
+      meta,
+      props: { label: 'Click me' },
+      storyFormat: factoryFormat,
+    })
+
+    expect(result.content).toBe(`import preview from '../../../.storybook/preview';
+import BaseButton from './BaseButton.vue';
+
+const meta = preview.meta({
+  component: BaseButton,
+});
+
+export const Default = meta.story({
+  args: {
+    label: "Click me",
+  },
+});
+`)
+    const csf = await parse(result.content)
+    expect(csf._metaIsFactory).toBe(true)
+    expect(Object.keys(csf._storyExports)).toEqual(['Default'])
+  })
+
+  it('keeps the slot render function and play function inside meta.story', async () => {
+    const result = await generateStory({
+      meta,
+      componentRegistry: registry,
+      props: {
+        label: 'With slots',
+        'slot:default': {
+          __isVueSlot: true,
+          source: '<BaseIcon name="star" />',
+          componentRefs: ['BaseIcon'],
+        },
+      },
+      playFunction: [
+        'play: async ({ canvasElement }) => {',
+        '  await expect(within(canvasElement).getByRole("button")).toBeVisible();',
+        '}',
+      ],
+      playImports: ["import { expect, within } from 'storybook/test';"],
+      storyFormat: factoryFormat,
+    })
+
+    expect(result.content).toContain("import { expect, within } from 'storybook/test';")
+    expect(result.content).toContain('export const Default = meta.story({\n  render: (args) => ({')
+    expect(result.content).toContain('template: `<BaseButton v-bind="componentArgs"><BaseIcon name="star" /></BaseButton>`')
+    expect(result.content).toContain('  play: async ({ canvasElement }) => {')
+    expect((await parse(result.content))._metaIsFactory).toBe(true)
+  })
+
+  it('appends to a factory file as meta.story', async () => {
+    const existingContent = `import preview from '../../../.storybook/preview';
+import BaseButton from './BaseButton.vue';
+
+const meta = preview.meta({
+  component: BaseButton,
+});
+
+export const Default = meta.story({
+  args: { label: 'Hello' },
+});
+`
+    const result = await generateStory({
+      meta,
+      props: { label: 'Second', variant: 'primary' },
+      existingContent,
+    })
+
+    expect(result.content).toBe(`${existingContent}
+export const Primary = meta.story({
+  args: {
+    label: "Second",
+    variant: "primary",
+  },
+});
+`)
+    const csf = await parse(result.content)
+    expect(csf._metaIsFactory).toBe(true)
+    expect(Object.keys(csf._storyExports)).toEqual(['Default', 'Primary'])
+  })
+
+  it("follows a CSF3 file's format even when the project is on factories", async () => {
+    const result = await generateStory({
+      meta,
+      props: { label: 'Second' },
+      existingContent: csf3,
+      storyFormat: factoryFormat,
+    })
+
+    expect(result.content).toContain('export const Default2: Story = {')
+    expect(result.content).not.toContain('meta.story(')
+  })
+})

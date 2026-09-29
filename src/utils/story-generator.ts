@@ -6,9 +6,10 @@ import type {
 } from '../frameworks/types'
 import * as path from 'path'
 import type { CsfImportRequest } from './csf-writer'
+import type { StoryFormat } from './csf-format'
 
 // Re-export types for consumers
-export type { SerializedProps, JSXSerializedValue, FunctionSerializedValue }
+export type { SerializedProps, JSXSerializedValue, FunctionSerializedValue, StoryFormat }
 
 export interface StoryGenerationData {
   meta: ComponentMeta
@@ -25,6 +26,11 @@ export interface StoryGenerationData {
   playImports?: string[]
   /** Storybook framework package for the `Meta`/`StoryObj` type import (defaults to the generator's framework package) */
   storybookFramework?: string
+  /**
+   * Format of a newly created story file (defaults to CSF3). Ignored when
+   * `existingContent` is set: an append follows the existing file's format.
+   */
+  storyFormat?: StoryFormat
 }
 
 export interface GeneratedStory {
@@ -41,6 +47,84 @@ export interface GeneratedStory {
    * it was (`src/utils/csf-writer.ts`).
    */
   fallbackReason?: string
+}
+
+/** How a story export is written in a file: as a CSF factory call or a CSF3 object. */
+export type ExportStyle =
+  | { kind: 'factory'; metaName: string }
+  | { kind: 'csf3'; annotation?: string; satisfies?: string }
+
+/** The story object literal around already-rendered members. */
+export function wrapStoryObject(members: string): string {
+  return `{${members}\n}`
+}
+
+/** `export const <name> ...` for a story object literal, in the given style. */
+export function renderStoryExport(
+  style: ExportStyle,
+  name: string,
+  objectSource: string,
+): string {
+  const object = objectSource.trim()
+  if (style.kind === 'factory') {
+    return `export const ${name} = ${style.metaName}.story(${object});\n`
+  }
+  if (style.satisfies) {
+    return `export const ${name} = ${object} satisfies ${style.satisfies};\n`
+  }
+  return `export const ${name}${style.annotation ? `: ${style.annotation}` : ''} = ${object};\n`
+}
+
+/**
+ * Header of a new story file: the imports, then the meta. CSF3 imports the
+ * `Meta`/`StoryObj` types from the framework package and declares a `Story`
+ * alias; a factory file imports the project's preview and creates the meta
+ * from it, needing neither type.
+ */
+export function renderStoryFileHeader(options: {
+  componentName: string
+  format: StoryFormat
+  /** Framework package the CSF3 type import comes from. */
+  storybookFramework: string
+  /** Import lines ahead of the storybook/component imports (e.g. React). */
+  leadingImports?: string[]
+  requiredImports: CsfImportRequest[]
+}): string {
+  const { componentName, format, storybookFramework, requiredImports } = options
+  const imports = [
+    ...(options.leadingImports ?? []),
+    ...(format.kind === 'factory'
+      ? [`import preview from '${format.previewImport}';`]
+      : [`import type { Meta, StoryObj } from '${storybookFramework}';`]),
+    ...requiredImports.map(printImportStatement),
+  ].join('\n')
+
+  if (format.kind === 'factory') {
+    return `${imports}
+
+const meta = preview.meta({
+  component: ${componentName},
+});
+
+`
+  }
+  return `${imports}
+
+const meta: Meta<typeof ${componentName}> = {
+  component: ${componentName},
+};
+
+export default meta;
+type Story = StoryObj<typeof ${componentName}>;
+
+`
+}
+
+/** The style a story export takes in a file this generator creates. */
+export function newFileExportStyle(format: StoryFormat): ExportStyle {
+  return format.kind === 'factory'
+    ? { kind: 'factory', metaName: 'meta' }
+    : { kind: 'csf3', annotation: 'Story' }
 }
 
 /**

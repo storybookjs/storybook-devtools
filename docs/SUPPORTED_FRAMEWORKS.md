@@ -28,6 +28,21 @@ MCP story tests use isolated Vitest browser projects on React, Vue and Nuxt.
 The rendered-page component-tree tool is React-only initially, covering React
 18/19 on Vite, Rsbuild and Next. Vue/Nuxt report unsupported rather than an empty tree.
 See [agent setup and evidence limits](./AGENT_MVP.md).
+The shared browser suite exercises first-click highlighter activation and
+repeated close/reopen through the actual dock on all six playgrounds. A separate
+serial suite launches Storybook and verifies generated stories and previews on
+five hosts; React 18 intentionally tests the missing-config failure path.
+The playgrounds pin Storybook `11.0.0-alpha.1`; local validation and CI run
+the unit, browser, and Storybook suites against this locked version only.
+The declared peer range remains `>=10.6.0 || ^11.0.0-0`; Storybook 10 is not
+part of the ongoing test matrix.
+Story format: `playground/vue` uses CSF factories (`definePreview` in
+`.storybook/preview.ts`, so new and appended stories are `meta.story(...)`);
+every other Storybook playground stays on CSF3, and the Storybook suite
+asserts each host's format. `@storybook/nextjs` is
+deprecated in Storybook 11 (it logs a deprecation warning on every run; the
+Next playground still uses it), and `vue-docgen-api` logs a deprecation warning
+for the Vue-based playgrounds.
 
 ## React
 
@@ -57,12 +72,19 @@ See [agent setup and evidence limits](./AGENT_MVP.md).
   coverage — treat Vue-on-Rsbuild as unverified.
 - Detection installs a minimal `__VUE_DEVTOOLS_GLOBAL_HOOK__` before the
   app's `createApp` runs, then subscribes to Vue's devtools events.
-  Components are never wrapped.
+  Components are never wrapped. Only source paths accepted by the transform's
+  include/exclude filter are tracked; dependency-owned DevTools components
+  are excluded from the app registry.
 - Caveat: unmount tracking requires the hook's `cleanupBuffer` method,
   present only because the hook is installed before the app mounts. Live
   prop editing is supported; see docs/ARCHITECTURE.md for the mechanism.
 
 ## Nuxt SSR
+
+- The release QA playground uses Nuxt 4.5.2, with Vite's native
+  `devtools.enabled` option. Do not add an explicit `DevTools()` plugin to
+  this setup; older Nuxt builders required it, but this version mounts it
+  automatically.
 
 - Standalone Storybook uses `@storybook/vue3-vite` with an explicit
   `@vitejs/plugin-vue` in `.storybook/main.ts`. It does not inherit

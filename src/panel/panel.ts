@@ -12,6 +12,7 @@ import { storyNameFromExport } from 'storybook/internal/csf/csf-utils'
 import { propEditability } from '../client/utils/prop-utils'
 import { createPropEditor } from '../client/utils/prop-editor'
 import {
+  findDocsEntry,
   findStoryCandidates,
   pickStoryId,
   stripExtForMatch,
@@ -42,6 +43,8 @@ async function initRpcClient() {
       }
       if (config.storybookDocsUrl) {
         storybookDocsUrl = config.storybookDocsUrl
+        const docsLink = document.getElementById('about-docs-link') as HTMLAnchorElement | null
+        if (docsLink) docsLink.href = storybookDocsUrl
       }
       // The Storybook tab renders once before this config arrives — its
       // status banner may show the default URL and a stale "not running";
@@ -189,11 +192,14 @@ interface RegistryInstance {
   editedProps?: string[]
 }
 
+const COMPONENT_ICON = '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" aria-hidden="true"><rect x="1" y="1" width="5" height="5" rx="1"/><rect x="8" y="1" width="5" height="5" rx="1"/><rect x="1" y="8" width="5" height="5" rx="1"/><rect x="8" y="8" width="5" height="5" rx="1"/></svg>'
+
 // ─── Icons ──────────────────────────────────────────────────────────
 const CODE_ICON = `<svg width="12" height="12" viewBox="0 0 14 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M7.53613 4.31055C7.63877 4.05443 7.92931 3.92987 8.18555 4.03223C8.44167 4.13483 8.56617 4.4254 8.46387 4.68164L6.46387 9.68164C6.36117 9.93761 6.07062 10.0623 5.81445 9.95996C5.55837 9.85739 5.43397 9.56674 5.53613 9.31055L7.53613 4.31055Z" fill="currentColor"/><path d="M3.64648 5.14258C3.84175 4.94762 4.15834 4.94747 4.35352 5.14258C4.5486 5.33775 4.54846 5.65435 4.35352 5.84961L3.20703 6.99609L4.35352 8.14258C4.5486 8.33775 4.54846 8.65435 4.35352 8.84961C4.15826 9.04458 3.84166 9.0447 3.64648 8.84961L2.14648 7.34961C2.04896 7.25205 2.00006 7.12393 2 6.99609C2.00001 6.93207 2.01266 6.86784 2.03711 6.80762C2.04931 6.77763 2.06475 6.74834 2.08301 6.7207L2.14648 6.64258L3.64648 5.14258Z" fill="currentColor"/><path d="M9.64648 5.14258C9.84174 4.94763 10.1583 4.9475 10.3535 5.14258L11.8535 6.64258L11.918 6.7207C11.9363 6.7484 11.9517 6.77755 11.9639 6.80762C11.9883 6.86782 12 6.93209 12 6.99609C11.9999 7.12383 11.9509 7.25208 11.8535 7.34961L10.3535 8.84961C10.1583 9.04455 9.84166 9.0447 9.64648 8.84961C9.45144 8.65443 9.45155 8.33782 9.64648 8.14258L10.793 6.99609L9.64648 5.84961C9.45142 5.65445 9.45158 5.33784 9.64648 5.14258Z" fill="currentColor"/><path fill-rule="evenodd" clip-rule="evenodd" d="M13.5 0C13.7761 0 14 0.223858 14 0.5V11.5L13.9902 11.6006C13.9503 11.7961 13.7961 11.9503 13.6006 11.9902L13.5 12H0.5L0.399414 11.9902C0.203918 11.9503 0.0496648 11.7961 0.00976562 11.6006L0 11.5V0.5C1.28852e-07 0.223858 0.223858 1.20798e-08 0.5 0H13.5ZM1 11H13V3H1V11ZM1.5 1C1.22386 1 1 1.22386 1 1.5C1 1.77614 1.22386 2 1.5 2C1.77614 2 2 1.77614 2 1.5C2 1.22386 1.77614 1 1.5 1ZM3.5 1C3.22386 1 3 1.22386 3 1.5C3 1.77614 3.22386 2 3.5 2C3.77614 2 4 1.77614 4 1.5C4 1.22386 3.77614 1 3.5 1ZM5.5 1C5.22386 1 5 1.22386 5 1.5C5 1.77614 5.22386 2 5.5 2C5.77614 2 6 1.77614 6 1.5C6 1.22386 5.77614 1 5.5 1Z" fill="currentColor"/></svg>`
 const PENCIL_ICON = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`
 const RESET_ICON = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>`
-// SB_LOGO_FULL — dual-color Storybook logo for the rail (pink bg + white S)
+// Full-color logo is reserved for the About page.
+const SB_TAB_ICON = `<svg width="16" height="16" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="m16.71.243l-.12 2.71a.18.18 0 0 0 .29.15l1.06-.8l.9.7a.18.18 0 0 0 .28-.14l-.1-2.76l1.33-.1a1.2 1.2 0 0 1 1.279 1.2v21.596a1.2 1.2 0 0 1-1.26 1.2l-16.096-.72a1.2 1.2 0 0 1-1.15-1.16l-.75-19.797a1.2 1.2 0 0 1 1.13-1.27L16.7.222zM13.64 9.3c0 .47 3.16.24 3.59-.08c0-3.2-1.72-4.89-4.859-4.89c-3.15 0-4.899 1.72-4.899 4.29c0 4.45 5.999 4.53 5.999 6.959c0 .7-.32 1.1-1.05 1.1c-.96 0-1.35-.49-1.3-2.16c0-.36-3.649-.48-3.769 0c-.27 4.03 2.23 5.2 5.099 5.2c2.79 0 4.969-1.49 4.969-4.18c0-4.77-6.099-4.64-6.099-6.999c0-.97.72-1.1 1.13-1.1c.45 0 1.25.07 1.19 1.87z"/></svg>`
 const SB_LOGO_FULL = `<svg width="20" height="20" viewBox="-31.5 0 319 319" xmlns="http://www.w3.org/2000/svg"><path fill="#FF4785" d="M9.87,293.32L0.01,30.57C-0.31,21.9,6.34,14.54,15.01,14L238.49,0.03C247.32,-0.52,254.91,6.18,255.47,15.01C255.49,15.34,255.5,15.67,255.5,16V302.32C255.5,311.16,248.33,318.32,239.49,318.32C239.25,318.32,239.01,318.32,238.77,318.31L25.15,308.71C16.83,308.34,10.18,301.65,9.87,293.32Z"/><path fill="#FFF" d="M188.67,39.13L190.19,2.41L220.88,0L222.21,37.86C222.25,39.18,221.22,40.29,219.9,40.33C219.34,40.35,218.79,40.17,218.34,39.82L206.51,30.5L192.49,41.13C191.44,41.93,189.95,41.72,189.15,40.67C188.81,40.23,188.64,39.68,188.67,39.13ZM149.41,119.98C149.41,126.21,191.36,123.22,196.99,118.85C196.99,76.45,174.23,54.17,132.57,54.17C90.91,54.17,67.57,76.79,67.57,110.74C67.57,169.85,147.35,170.98,147.35,203.23C147.35,212.28,142.91,217.65,133.16,217.65C120.46,217.65,115.43,211.17,116.02,189.1C116.02,184.32,67.57,182.82,66.09,189.1C62.33,242.57,95.64,257.99,133.75,257.99C170.69,257.99,199.65,238.3,199.65,202.66C199.65,139.3,118.68,141,118.68,109.6C118.68,96.88,128.14,95.18,133.75,95.18C139.66,95.18,150.3,96.22,149.41,119.98Z"/></svg>`
 const COVERAGE_TAB_ICON = `<svg width="16" height="16" viewBox="0 0 10 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M9.76464 1.0757C9.90598 1.16404 10 1.32104 10 1.5V7.5L9.99992 7.50892C9.9987 7.57865 9.98321 7.64491 9.95623 7.70488C9.92676 7.77041 9.88358 7.82845 9.83035 7.87534L5.3369 11.8695C5.30013 11.9031 5.25937 11.9303 5.21616 11.951C5.14779 11.9838 5.0738 12 5 12C4.9262 12 4.85221 11.9838 4.78384 11.951C4.74062 11.9303 4.69986 11.9031 4.66308 11.8695L0.169665 7.87535L0.161201 7.86772C0.109893 7.82048 0.0706711 7.76488 0.0437672 7.70488C0.0169921 7.64535 0.0015266 7.57963 0.000107183 7.51046L0 7.5V1.5C0 1.32103 0.0940346 1.16401 0.235393 1.07568L0.252579 1.06477C0.268532 1.0548 0.290464 1.04142 0.318377 1.02514C0.374201 0.992577 0.453956 0.94838 0.557643 0.896536C0.765036 0.79284 1.06813 0.658576 1.46689 0.525658C2.2651 0.259589 3.44341 0 5 0C6.55659 0 7.7349 0.259589 8.53311 0.525658C8.93187 0.658576 9.23496 0.79284 9.44236 0.896536C9.54604 0.94838 9.6258 0.992577 9.68162 1.02514C9.70954 1.04142 9.73147 1.0548 9.74742 1.06477L9.76464 1.0757ZM1 1.7934V7.27547L2.06804 8.22483L8.65573 1.63719C8.53022 1.58541 8.38394 1.53003 8.21689 1.47434C7.5151 1.24041 6.44341 1 5 1C3.55659 1 2.4849 1.24041 1.78311 1.47434C1.43187 1.59142 1.17246 1.70716 1.00486 1.79096L1 1.7934ZM5 10.831L2.81674 8.89035L9 2.70713V7.27547L5 10.831Z" fill="currentColor"/></svg>`
 const CROSSHAIR_ICON = `<svg width="16" height="16" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 3.00391C0.447715 3.00391 0 3.45162 0 4.00391V9.00391C0 9.55619 0.447715 10.0039 1 10.0039H4.5C4.77614 10.0039 5 9.78005 5 9.50391C5 9.22776 4.77614 9.00391 4.5 9.00391H1V4.00391L13 4.00391V9.00391H12C11.7239 9.00391 11.5 9.22776 11.5 9.50391C11.5 9.78005 11.7239 10.0039 12 10.0039H13C13.5523 10.0039 14 9.55619 14 9.00391V4.00391C14 3.45162 13.5523 3.00391 13 3.00391H1Z" fill="currentColor"/><path d="M6.45041 7.00643C6.50971 7.00046 6.5704 7.00502 6.62952 7.0209C6.67575 7.03326 6.71935 7.05208 6.75929 7.07634L10.2265 9.09876C10.2664 9.12106 10.3035 9.149 10.3366 9.18222C10.3798 9.22561 10.414 9.27597 10.4384 9.33038C10.4682 9.39673 10.4824 9.46686 10.4822 9.53619C10.4821 9.60554 10.4676 9.67562 10.4374 9.74185C10.4128 9.79612 10.3784 9.84632 10.335 9.8895C10.3018 9.92257 10.2646 9.95035 10.2245 9.97248L9.1496 10.5931L9.8996 11.8921C10.1067 12.2508 9.9838 12.7095 9.62508 12.9166C9.26636 13.1238 8.80767 13.0008 8.60056 12.6421L7.85056 11.3431L6.77563 11.9637C6.73646 11.9873 6.69378 12.0057 6.64855 12.0179C6.58942 12.0339 6.52873 12.0386 6.46941 12.0327C6.39698 12.0258 6.32904 12.0033 6.26895 11.9687C6.2088 11.9342 6.15518 11.8869 6.11265 11.8278C6.07771 11.7795 6.05119 11.7247 6.03524 11.6656C6.02298 11.6204 6.01735 11.5743 6.018 11.5285L6.00012 7.51465C5.99908 7.46793 6.00458 7.42076 6.017 7.37454C6.03285 7.31525 6.05933 7.26029 6.09428 7.21183C6.13666 7.15281 6.1901 7.10543 6.25004 7.0709C6.31004 7.03618 6.37794 7.01357 6.45041 7.00643Z" fill="currentColor"/></svg>`
@@ -202,9 +208,7 @@ const HELP_ICON = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" x
 const DOCS_TAB_ICON = `<svg width="14" height="14" viewBox="0 0 12 14" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 5.5C3 5.22386 3.22386 5 3.5 5H8.5C8.77614 5 9 5.22386 9 5.5C9 5.77614 8.77614 6 8.5 6H3.5C3.22386 6 3 5.77614 3 5.5Z" fill="currentColor"/><path d="M3.5 7.5C3.22386 7.5 3 7.72386 3 8C3 8.27614 3.22386 8.5 3.5 8.5H8.5C8.77614 8.5 9 8.27614 9 8C9 7.72386 8.77614 7.5 8.5 7.5H3.5Z" fill="currentColor"/><path d="M3 10.5C3 10.2239 3.22386 10 3.5 10H8.5C8.77614 10 9 10.2239 9 10.5C9 10.7761 8.77614 11 8.5 11H3.5C3.22386 11 3 10.7761 3 10.5Z" fill="currentColor"/><path fill-rule="evenodd" clip-rule="evenodd" d="M0.5 0C0.223858 0 0 0.223857 0 0.5V13.5C0 13.7761 0.223858 14 0.5 14H11.5C11.7761 14 12 13.7761 12 13.5V3.20711C12 3.0745 11.9473 2.94732 11.8536 2.85355L9.14645 0.146447C9.05268 0.0526784 8.9255 0 8.79289 0H0.5ZM1 1H8.5V3C8.5 3.27614 8.72386 3.5 9 3.5H11V13H1V1Z" fill="currentColor"/></svg>`
 const EYE_ICON = `<svg width="12" height="12" viewBox="0 0 11.2368 13.9999" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M0.659982 0.615712C0.278813 0.639535 -0.013819 0.962974 0.000504064 1.34462L0.434194 12.9005C0.447931 13.2665 0.740084 13.5608 1.106 13.5773L10.5014 13.9992C10.5119 13.9997 10.5224 13.9999 10.533 13.9999C10.9217 13.9999 11.2368 13.6848 11.2368 13.2961V0.703904C11.2368 0.689258 11.2364 0.674615 11.2355 0.659997C11.2112 0.272012 10.877 -0.0228544 10.4891 0.00139464L9.71642 0.0497456L9.77284 1.6653C9.77487 1.72325 9.72953 1.77187 9.67157 1.7739C9.64676 1.77476 9.62244 1.76681 9.60293 1.75144L9.08239 1.34138L8.46609 1.80888C8.41989 1.84393 8.35402 1.83489 8.31898 1.78869C8.30422 1.76924 8.29671 1.74526 8.29772 1.72087L8.36369 0.134291L0.659982 0.615712ZM8.66356 5.36294C8.41593 5.5553 6.57131 5.68655 6.57131 5.4127C6.6103 4.36774 6.14247 4.32193 5.88256 4.32193C5.63565 4.32193 5.2198 4.39657 5.2198 4.95637C5.2198 5.52683 5.82752 5.84888 6.54082 6.22689C7.55413 6.76387 8.78051 7.41377 8.78051 9.04913C8.78051 10.6166 7.50697 11.4824 5.88256 11.4824C4.20616 11.4824 2.74118 10.8042 2.90663 8.45275C2.97161 8.17663 5.10284 8.24225 5.10284 8.45275C5.07685 9.42307 5.29777 9.70845 5.85657 9.70845C6.28541 9.70845 6.48034 9.47209 6.48034 9.07401C6.48034 8.47157 5.84715 8.11607 5.11874 7.7071C4.13246 7.15336 2.97161 6.50161 2.97161 5.00613C2.97161 3.51333 3.99824 2.51813 5.83058 2.51813C7.66292 2.51813 8.66356 3.49808 8.66356 5.36294Z" fill="currentColor"/></svg>`
 const PLUS_ICON = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>`
-const CHECK_ICON = `<svg width="12" height="12" viewBox="0 0 14 9.5" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M13.8536 0.853553C14.0488 0.658291 14.0488 0.341709 13.8536 0.146447C13.6583 -0.0488155 13.3417 -0.0488155 13.1464 0.146447L5 8.29289L0.853553 4.14645C0.658291 3.95118 0.341709 3.95118 0.146447 4.14645C-0.0488155 4.34171 -0.0488155 4.65829 0.146447 4.85355L4.64645 9.35355C4.84171 9.54882 5.15829 9.54882 5.35355 9.35355L13.8536 0.853553Z" fill="currentColor"/></svg>`
 const ELLIPSIS_ICON = `<svg width="12" height="3" viewBox="0 0 12 3" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 1.5C3 2.32843 2.32843 3 1.5 3C0.671573 3 0 2.32843 0 1.5C0 0.671573 0.671573 0 1.5 0C2.32843 0 3 0.671573 3 1.5Z" fill="currentColor"/><path d="M12 1.5C12 2.32843 11.3284 3 10.5 3C9.67157 3 9 2.32843 9 1.5C9 0.671573 9.67157 0 10.5 0C11.3284 0 12 0.671573 12 1.5Z" fill="currentColor"/><path d="M6 3C6.82843 3 7.5 2.32843 7.5 1.5C7.5 0.671573 6.82843 0 6 0C5.17157 0 4.5 0.671573 4.5 1.5C4.5 2.32843 5.17157 3 6 3Z" fill="currentColor"/></svg>`
-const WARNING_ICON = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M7.134 2.5a1 1 0 0 1 1.732 0l5.196 9A1 1 0 0 1 13.196 13H2.804a1 1 0 0 1-.866-1.5l5.196-9Z" stroke="currentColor" stroke-width="1.2" fill="none"/><path d="M8 6v3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><circle cx="8" cy="11" r="0.7" fill="currentColor"/></svg>`
 const BULLSEYE_ICON = `<svg width="12" height="12" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M0 7C0 3.13401 3.13401 0 7 0C10.866 0 14 3.13401 14 7C14 10.866 10.866 14 7 14C3.13401 14 0 10.866 0 7ZM6.5 10.5V12.9795C3.5851 12.739 1.26101 10.4149 1.02054 7.5H3.5C3.77614 7.5 4 7.27614 4 7C4 6.72386 3.77614 6.5 3.5 6.5H1.02054C1.26101 3.5851 3.5851 1.26101 6.5 1.02054V3.5C6.5 3.77614 6.72386 4 7 4C7.27614 4 7.5 3.77614 7.5 3.5V1.02054C10.4149 1.26101 12.739 3.5851 12.9795 6.5H10.5C10.2239 6.5 10 6.72386 10 7C10 7.27614 10.2239 7.5 10.5 7.5H12.9795C12.739 10.4149 10.4149 12.739 7.5 12.9795V10.5C7.5 10.2239 7.27614 10 7 10C6.72386 10 6.5 10.2239 6.5 10.5Z" fill="currentColor"/></svg>`
 
 // ─── Types ──────────────────────────────────────────────────────────
@@ -300,6 +304,9 @@ interface StorybookIndexEntry {
   name: string
   importPath: string
   type: string
+  tags?: string[]
+  /** Docs entries only: story files this docs page must pre-load (`attached-mdx`). */
+  storiesImports?: string[]
 }
 
 let storybookIndexCache: Record<string, StorybookIndexEntry> | null = null
@@ -619,8 +626,15 @@ function registerPanelRpcHandlers() {
   }
 }
 
-/** Ask the client to remove all coverage highlight overlays via RPC */
+/** Clear the bulk-highlight toggle when another view or row takes over. */
+function resetCoveragePreview() {
+  const button = document.querySelector('.cov-preview-btn')
+  button?.setAttribute('aria-pressed', 'false')
+  button?.classList.remove('active')
+}
+
 function clearAllHighlights() {
+  resetCoveragePreview()
   rpcCall('component-highlighter:highlight-coverage-instances', null).catch(
     () => {},
   )
@@ -955,6 +969,8 @@ async function createStoryForComponent(filePath: string): Promise<boolean> {
  */
 // ─── Coverage tab ───────────────────────────────────────────────────
 
+let coverageSearch = ''
+let coverageGenerating = false
 let lastCoverageJson = ''
 let lastVisibilityKey = ''
 
@@ -1017,7 +1033,6 @@ async function buildCoveragePanel(coverage: CoverageData) {
   const cc = coverageColorClass(pctVisible)
 
   const missingEntries = visibleEntries.filter((e) => !e.hasStory)
-  const coveredEntries = visibleEntries.filter((e) => e.hasStory)
 
   const root = document.createElement('div')
   root.className = 'coverage-root'
@@ -1068,6 +1083,7 @@ async function buildCoveragePanel(coverage: CoverageData) {
 
   // Highlight/clear helpers — delegate to client via RPC broadcast
   const highlightInstances = (componentName: string, hasStory: boolean) => {
+    resetCoveragePreview()
     rpcCall('component-highlighter:highlight-coverage-instances', {
       componentName,
       hasStory,
@@ -1080,230 +1096,143 @@ async function buildCoveragePanel(coverage: CoverageData) {
     )
   }
 
-  // Scrollable wrapper for both sections
-  const listWrap = document.createElement('div')
-  listWrap.className = 'cov-list-wrap'
+  const toolbar = document.createElement('div')
+  toolbar.className = 'cov-toolbar'
+  const search = document.createElement('input')
+  search.type = 'search'
+  search.className = 'cov-search'
+  search.placeholder = 'Find components…'
+  search.setAttribute('aria-label', 'Find components')
+  search.value = coverageSearch
+  toolbar.appendChild(search)
+  root.appendChild(toolbar)
 
-  // ── Missing section ──
-  if (missingEntries.length > 0) {
-    const section = document.createElement('div')
-    section.className = 'cov-section'
-
-    const sectionHdr = document.createElement('div')
-    sectionHdr.className = 'cov-section-hdr'
-
-    const sectionTitle = document.createElement('span')
-    sectionTitle.className = 'cov-section-title'
-    sectionTitle.innerHTML = `Missing<span class="cov-section-count">${missingEntries.length}</span>`
-    sectionHdr.appendChild(sectionTitle)
-
-    const sectionActions = document.createElement('div')
-    sectionActions.className = 'cov-section-actions'
-
-    // Preview button — highlights all uncovered components on the page
+  if (missingEntries.length) {
+    const bulk = document.createElement('div')
+    bulk.className = 'cov-bulk-actions'
     const previewBtn = document.createElement('button')
     previewBtn.className = 'cov-preview-btn'
-    previewBtn.textContent = 'Preview'
-    previewBtn.title = 'Highlight all uncovered components on the page'
-    let previewing = false
+    previewBtn.textContent = 'Highlight missing'
+    previewBtn.setAttribute('aria-pressed', 'false')
     previewBtn.addEventListener('click', () => {
-      previewing = !previewing
+      const previewing = previewBtn.getAttribute('aria-pressed') !== 'true'
+      previewBtn.setAttribute('aria-pressed', String(previewing))
       previewBtn.classList.toggle('active', previewing)
-      if (previewing) {
-        // Highlight all uncovered components at once via batch RPC
-        const batch = missingEntries.map((e) => ({
-          componentName: e.componentName,
-          hasStory: false,
-        }))
-        rpcCall('component-highlighter:highlight-coverage-batch', batch).catch(
-          () => {},
-        )
-      } else {
-        clearHighlights()
+      rpcCall('component-highlighter:highlight-coverage-batch', previewing
+        ? missingEntries.map(e => ({ componentName: e.componentName, hasStory: false })) : []).catch(() => {})
+    })
+    bulk.appendChild(previewBtn)
+    const generate = document.createElement('button')
+    generate.className = 'create-all-btn'
+    generate.textContent = coverageGenerating ? 'Generating…' : 'Generate all'
+    generate.disabled = coverageGenerating
+    generate.title = 'Create stories for all components on this page that need stories'
+    generate.addEventListener('click', async () => {
+      if (coverageGenerating) return
+      coverageGenerating = true
+      generate.disabled = true
+      generate.textContent = 'Generating…'
+      try {
+        const paths = new Set(missingEntries.map(e => e.filePath))
+        const selections = (await collectAllVisibleInstances()).filter(sel => paths.has(sel.instance.meta.filePath))
+        await rpcCall('component-highlighter:create-stories', selections.map(({ instance, index, total }) => ({
+          meta: instance.meta,
+          serializedProps: instance.serializedProps,
+          ...(total > 1 ? { sourceInstance: { index, total } } : {}),
+        })))
+      } catch {
+        await rpcCall('component-highlighter:notify', { message: 'Could not generate stories. Try again.', level: 'error' }).catch(() => {})
+      } finally {
+        coverageGenerating = false
+        lastCoverageJson = ''
+        await refreshCoverage()
       }
     })
-    sectionActions.appendChild(previewBtn)
-
-    // "Generate all" button
-    const allVisibleInstances = await collectAllVisibleInstances()
-    const uncoveredFilePaths = new Set(missingEntries.map((e) => e.filePath))
-    const uncoveredSelections = allVisibleInstances.filter(
-      (sel) =>
-        sel.instance.meta?.filePath &&
-        uncoveredFilePaths.has(sel.instance.meta.filePath),
-    )
-    if (uncoveredSelections.length > 0) {
-      const createAllBtn = document.createElement('button')
-      createAllBtn.className = 'create-all-btn'
-      createAllBtn.textContent = 'Generate all'
-      createAllBtn.title = `Create stories for ${uncoveredSelections.length} uncovered component${uncoveredSelections.length === 1 ? '' : 's'}`
-      createAllBtn.addEventListener('click', async () => {
-        createAllBtn.disabled = true
-        createAllBtn.textContent = 'Creating\u2026'
-        for (const { instance, index, total } of uncoveredSelections) {
-          try {
-            await rpcCall('component-highlighter:create-story', {
-              meta: instance.meta,
-              serializedProps: instance.serializedProps,
-              skipNavigation: true,
-              ...(total > 1 ? { sourceInstance: { index, total } } : {}),
-            })
-          } catch {
-            // Best effort
-          }
-        }
-        setTimeout(() => {
-          lastCoverageJson = ''
-          refreshCoverage()
-        }, 1500)
-      })
-      sectionActions.appendChild(createAllBtn)
-    }
-
-    sectionHdr.appendChild(sectionActions)
-    section.appendChild(sectionHdr)
-
-    const list = document.createElement('ul')
-    list.className = 'cov-list'
-
-    for (const entry of missingEntries) {
-      const li = document.createElement('li')
-      li.className = 'cov-item'
-
-      const info = document.createElement('div')
-      info.className = 'cov-item-info'
-      info.innerHTML = `
-        <div class="comp-name">${esc(entry.componentName)}</div>
-        <div class="comp-file" title="${esc(entry.relativeFilePath)}">${esc(entry.relativeFilePath)}</div>
-      `
-      li.appendChild(info)
-
-      const actions = document.createElement('div')
-      actions.className = 'cov-item-actions'
-
-      // More actions (hidden until hover)
-      const moreBtn = document.createElement('button')
-      moreBtn.className = 'act-btn more-btn'
-      moreBtn.innerHTML = ELLIPSIS_ICON
-      moreBtn.title = 'More actions'
-      moreBtn.addEventListener('click', (e) => {
-        e.stopPropagation()
-        showActionPopover(moreBtn, entry)
-      })
-      actions.appendChild(moreBtn)
-
-      // Warning icon
-      const warn = document.createElement('span')
-      warn.className = 'cov-warning-icon'
-      warn.innerHTML = WARNING_ICON
-      actions.appendChild(warn)
-
-      // Create story "+" button
-      const createBtn = document.createElement('button')
-      createBtn.className = 'act-btn create'
-      createBtn.innerHTML = PLUS_ICON
-      createBtn.title = 'Create story from current props'
-      createBtn.addEventListener('click', async (e) => {
-        e.stopPropagation()
-        createBtn.disabled = true
-        const created = await createStoryForComponent(entry.filePath)
-        if (created) {
-          setTimeout(() => {
-            lastCoverageJson = ''
-            refreshCoverage()
-          }, 1500)
-        } else {
-          createBtn.disabled = false
-        }
-      })
-      actions.appendChild(createBtn)
-
-      li.appendChild(actions)
-
-      // Hover → highlight matching component instances on the app page via RPC
-      li.addEventListener('mouseenter', () => {
-        highlightInstances(entry.componentName, false)
-      })
-      li.addEventListener('mouseleave', () => {
-        if (!previewing) clearHighlights()
-      })
-
-      list.appendChild(li)
-    }
-
-    section.appendChild(list)
-    listWrap.appendChild(section)
+    bulk.appendChild(generate)
+    toolbar.appendChild(bulk)
   }
 
-  // ── Covered section ──
-  if (coveredEntries.length > 0) {
-    const section = document.createElement('div')
-    section.className = 'cov-section'
-
-    const sectionHdr = document.createElement('div')
-    sectionHdr.className = 'cov-section-hdr'
-
-    const sectionTitle = document.createElement('span')
-    sectionTitle.className = 'cov-section-title'
-    sectionTitle.innerHTML = `Covered<span class="cov-section-count">${coveredEntries.length}</span>`
-    sectionHdr.appendChild(sectionTitle)
-
-    section.appendChild(sectionHdr)
-
-    const list = document.createElement('ul')
-    list.className = 'cov-list'
-
-    for (const entry of coveredEntries) {
-      const li = document.createElement('li')
-      li.className = 'cov-item'
-
-      const info = document.createElement('div')
-      info.className = 'cov-item-info'
-      info.innerHTML = `
-        <div class="comp-name">${esc(entry.componentName)}</div>
-        <div class="comp-file" title="${esc(entry.relativeFilePath)}">${esc(entry.relativeFilePath)}</div>
-      `
-      li.appendChild(info)
-
-      const actions = document.createElement('div')
-      actions.className = 'cov-item-actions'
-
-      // More actions (hidden until hover)
-      const moreBtn = document.createElement('button')
-      moreBtn.className = 'act-btn more-btn'
-      moreBtn.innerHTML = ELLIPSIS_ICON
-      moreBtn.title = 'More actions'
-      moreBtn.addEventListener('click', (e) => {
-        e.stopPropagation()
-        showActionPopover(moreBtn, entry)
-      })
-      actions.appendChild(moreBtn)
-
-      // Checkmark icon
-      const check = document.createElement('span')
-      check.className = 'cov-check-icon'
-      check.innerHTML = CHECK_ICON
-      actions.appendChild(check)
-
-      li.appendChild(actions)
-
-      // Hover → highlight matching component instances on the app page via RPC
-      li.addEventListener('mouseenter', () => {
-        highlightInstances(entry.componentName, true)
-      })
-      li.addEventListener('mouseleave', clearHighlights)
-
-      list.appendChild(li)
-    }
-
-    section.appendChild(list)
-    listWrap.appendChild(section)
-  }
-
+  const listWrap = document.createElement('div')
+  listWrap.className = 'cov-list-wrap'
   root.appendChild(listWrap)
-
-  pane.innerHTML = ''
-  pane.appendChild(root)
+  const renderList = () => {
+    listWrap.replaceChildren()
+    const query = coverageSearch.trim().toLowerCase()
+    const filtered = visibleEntries.filter(e => `${e.componentName} ${e.relativeFilePath}`.toLowerCase().includes(query))
+    if (!filtered.length) {
+      const empty = document.createElement('div')
+      empty.className = 'empty'
+      empty.textContent = 'No matching components'
+      listWrap.appendChild(empty)
+    }
+    for (const hasStory of [false, true]) {
+      const entries = filtered.filter(e => e.hasStory === hasStory)
+      if (!entries.length) continue
+      const section = document.createElement('section')
+      section.className = 'cov-section'
+      const heading = document.createElement('h3')
+      heading.className = 'cov-section-title'
+      heading.innerHTML = `${hasStory ? 'Has stories' : 'Needs stories'} <span class="cov-section-count">${entries.length}</span>`
+      section.appendChild(heading)
+      const list = document.createElement('ul')
+      list.className = 'cov-list'
+      for (const entry of entries) {
+        const li = document.createElement('li')
+        li.className = 'cov-item'
+        const inspect = document.createElement('button')
+        inspect.className = 'cov-item-info'
+        inspect.setAttribute('aria-label', `Inspect ${entry.componentName}`)
+        inspect.innerHTML = `<span class="cov-component-icon" aria-hidden="true">${COMPONENT_ICON}</span><span class="cov-item-text"><span class="comp-name">${esc(entry.componentName)}</span><span class="comp-file" title="${esc(entry.relativeFilePath)}">${esc(entry.relativeFilePath)}</span></span>`
+        const openInspector = (tab: DetailTab) => {
+          const selection = pickRepresentativeByKey(fetchRegistry().filter(i => i.meta.filePath === entry.filePath && i.isConnected), i => i.meta.filePath)[0]
+          if (!selection) return
+          selectedComponent = selection
+          requestedDetailTab = tab
+          switchTab('highlighter')
+        }
+        inspect.addEventListener('click', () => openInspector('properties'))
+        li.appendChild(inspect)
+        const actions = document.createElement('div')
+        actions.className = 'cov-item-actions'
+        const primary = document.createElement('button')
+        primary.className = 'cov-primary-action'
+        primary.innerHTML = `${hasStory ? EYE_ICON : PLUS_ICON}<span>${hasStory ? 'View stories' : 'Create story'}</span>`
+        primary.setAttribute('aria-label', `${hasStory ? 'View stories for' : 'Create story for'} ${entry.componentName}`)
+        primary.addEventListener('click', async () => {
+          if (hasStory) { openInspector('stories'); return }
+          primary.disabled = true
+          primary.textContent = 'Creating…'
+          try {
+            await createStoryForComponent(entry.filePath)
+          } finally {
+            lastCoverageJson = ''
+            await refreshCoverage()
+          }
+        })
+        actions.appendChild(primary)
+        const more = document.createElement('button')
+        more.className = 'act-btn more-btn'
+        more.innerHTML = ELLIPSIS_ICON
+        more.title = `More actions for ${entry.componentName}`
+        more.setAttribute('aria-label', more.title)
+        more.addEventListener('click', event => { event.stopPropagation(); showActionPopover(more, entry) })
+        actions.appendChild(more)
+        li.appendChild(actions)
+        li.addEventListener('mouseenter', () => highlightInstances(entry.componentName, hasStory))
+        li.addEventListener('mouseleave', clearHighlights)
+        li.addEventListener('focusin', () => highlightInstances(entry.componentName, hasStory))
+        li.addEventListener('focusout', event => { if (!li.contains(event.relatedTarget as Node)) clearHighlights() })
+        list.appendChild(li)
+      }
+      section.appendChild(list)
+      listWrap.appendChild(section)
+    }
+  }
+  search.addEventListener('input', () => { coverageSearch = search.value; renderList() })
+  renderList()
+  const restoreSearchFocus = document.activeElement?.classList.contains('cov-search')
+  pane.replaceChildren(root)
+  if (restoreSearchFocus) search.focus()
 }
 
 // ─── Highlighter tab ────────────────────────────────────────────────
@@ -1408,10 +1337,8 @@ async function refreshStoriesAfterCreate(
     list.appendChild(appended)
   }
 
-  const hdr = pane.querySelector('.hl-stories-section .hl-section-hdr')
-  if (hdr) {
-    hdr.innerHTML = `<span class="hl-section-title">Stories <span class="cov-section-count">${stories.length}</span></span>`
-  }
+  const hdr = pane.querySelector('.hl-detail-tabs')
+  if (hdr) updateStoriesHeaderCount(hdr, stories.length)
 
   const expectedName = storyNameFromExport(requestedName)
   const target =
@@ -1452,6 +1379,81 @@ function scrollCardIntoView(card: HTMLElement, scroller: HTMLElement) {
   tick()
 }
 
+// ─── Stories/Docs tabs ──────────────────────────────────────────────
+
+const STORIES_TAB_ID = 'hl-stories-tab-stories'
+const DOCS_TAB_ID = 'hl-stories-tab-docs'
+const STORIES_PANEL_ID = 'hl-stories-panel-stories'
+const DOCS_PANEL_ID = 'hl-stories-panel-docs'
+
+type DetailTab = 'properties' | 'stories' | 'docs'
+let requestedDetailTab: DetailTab | null = null
+let highlighterBuildVersion = 0
+
+/** Peer inspector tabs, with automatic activation and roving keyboard focus. */
+function buildDetailTabs(count: number, hasDocs: boolean, initial: DetailTab, onSelect: (tab: DetailTab) => void) {
+  const tabs = document.createElement('div')
+  tabs.className = 'hl-detail-tabs'
+  tabs.setAttribute('role', 'tablist')
+  tabs.setAttribute('aria-label', 'Component details')
+  const names: DetailTab[] = hasDocs ? ['properties', 'stories', 'docs'] : ['properties', 'stories']
+  const buttons = names.map(name => {
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = 'hl-detail-tab'
+    button.id = name === 'properties' ? 'hl-properties-tab' : name === 'stories' ? STORIES_TAB_ID : DOCS_TAB_ID
+    button.setAttribute('role', 'tab')
+    button.setAttribute('aria-controls', name === 'properties' ? 'hl-properties-panel' : name === 'stories' ? STORIES_PANEL_ID : DOCS_PANEL_ID)
+    button.textContent = name === 'properties' ? 'Properties' : name === 'stories' ? 'Stories' : 'Docs'
+    if (name === 'stories' && count) {
+      const badge = document.createElement('span')
+      badge.className = 'cov-section-count'
+      badge.textContent = String(count)
+      button.appendChild(badge)
+    }
+    button.addEventListener('click', () => select(name))
+    button.addEventListener('keydown', event => {
+      const index = names.indexOf(name)
+      const next = event.key === 'Home' ? 0 : event.key === 'End' ? names.length - 1
+        : event.key === 'ArrowRight' ? (index + 1) % names.length
+        : event.key === 'ArrowLeft' ? (index + names.length - 1) % names.length : -1
+      if (next < 0) return
+      event.preventDefault()
+      buttons[next]!.focus()
+      select(names[next]!)
+    })
+    tabs.appendChild(button)
+    return button
+  })
+  function select(name: DetailTab) {
+    buttons.forEach((button, index) => {
+      const selected = names[index] === name
+      button.setAttribute('aria-selected', String(selected))
+      button.tabIndex = selected ? 0 : -1
+    })
+    onSelect(name)
+  }
+  select(names.includes(initial) ? initial : 'properties')
+  return tabs
+}
+
+/**
+ * Update the Stories header's count in place, without touching the tablist
+ * (when a Docs tab is present) — a full `innerHTML` rewrite here would
+ * discard the tabs and desync whichever one is currently selected.
+ */
+function updateStoriesHeaderCount(hdr: Element, count: number) {
+  const label = hdr.querySelector(`#${STORIES_TAB_ID}`) ?? hdr.querySelector('.hl-section-title')
+  if (!label) return
+  let countEl = label.querySelector('.cov-section-count')
+  if (!countEl) {
+    countEl = document.createElement('span')
+    countEl.className = 'cov-section-count'
+    label.append(' ', countEl)
+  }
+  countEl.textContent = String(count)
+}
+
 /** Find stories matching a component by file path or title */
 async function findMatchingStories(relativeFilePath: string, componentName?: string): Promise<StorybookIndexEntry[]> {
   const entries = await getStorybookIndex()
@@ -1465,8 +1467,32 @@ async function findMatchingStories(relativeFilePath: string, componentName?: str
   ) as StorybookIndexEntry[]
 }
 
+/**
+ * Find the component's docs entry (autodocs or attached MDX), if Storybook's
+ * index has one. `null` when the component has no stories, or has stories
+ * but no docs page — the Stories section then renders without a Docs tab.
+ */
+async function findMatchingDocsEntry(
+  relativeFilePath: string,
+  componentName?: string,
+): Promise<StorybookIndexEntry | null> {
+  const entries = await getStorybookIndex()
+  if (!entries || Object.keys(entries).length === 0) return null
+  const baseName =
+    stripExtForMatch(relativeFilePath).split('/').pop() || relativeFilePath
+  const candidates = findStoryCandidates(
+    entries,
+    relativeFilePath,
+    componentName || baseName,
+  )
+  return findDocsEntry(entries, candidates) as StorybookIndexEntry | null
+}
+
 /** Build the highlighter panel — empty state or component detail */
 async function buildHighlighterPanel() {
+  const buildVersion = ++highlighterBuildVersion
+  const requestedTab = requestedDetailTab
+  requestedDetailTab = null
   const pane = document.getElementById('pane-highlighter')
   if (!pane) return
 
@@ -1487,6 +1513,7 @@ async function buildHighlighterPanel() {
   // Look up stories first so we can conditionally show story-related actions
   const matchingStories = await findMatchingStories(relPath, comp.meta.componentName)
   const hasStories = matchingStories.length > 0
+  const docsEntry = await findMatchingDocsEntry(relPath, comp.meta.componentName)
 
   // Also look up the coverage entry to find storyPath
   let storyPath: string | null = null
@@ -1530,7 +1557,8 @@ async function buildHighlighterPanel() {
   const editorBtn = document.createElement('button')
   editorBtn.className = 'act-btn'
   editorBtn.innerHTML = CODE_ICON
-  editorBtn.title = 'Open in editor'
+  editorBtn.title = 'Open component in editor'
+  editorBtn.setAttribute('aria-label', editorBtn.title)
   editorBtn.addEventListener('click', () => openInEditor(comp.meta.filePath))
   hdrActions.appendChild(editorBtn)
 
@@ -1547,6 +1575,13 @@ async function buildHighlighterPanel() {
 
   hdr.appendChild(hdrActions)
   root.appendChild(hdr)
+
+  const propertiesPanel = document.createElement('div')
+  propertiesPanel.id = 'hl-properties-panel'
+  propertiesPanel.className = 'hl-properties-panel'
+  propertiesPanel.setAttribute('role', 'tabpanel')
+  propertiesPanel.setAttribute('aria-labelledby', 'hl-properties-tab')
+  root.appendChild(propertiesPanel)
 
   // ── Properties section ──
   // serializedProps is the single RPC-safe representation for every framework
@@ -1728,7 +1763,9 @@ async function buildHighlighterPanel() {
     }
 
     propsSection.appendChild(propsTable)
-    root.appendChild(propsSection)
+    propertiesPanel.appendChild(propsSection)
+  } else {
+    propertiesPanel.innerHTML = '<div class="hl-sb-status"><div class="hl-sb-status-msg">No properties to inspect</div><div class="hl-sb-status-sub">This component has no captured props.</div></div>'
   }
 
   // ── Story creation ──
@@ -1748,13 +1785,14 @@ async function buildHighlighterPanel() {
   storyNameInput.className = 'hl-prop-input'
   storyNameInput.type = 'text'
   storyNameInput.placeholder = 'Story name\u2026'
+  storyNameInput.setAttribute('aria-label', 'Story name')
   storyNameInput.value = suggestStoryName(comp.serializedProps || {})
   storyNameInput.addEventListener('focus', () => storyNameInput.select())
   storyNameRow.appendChild(storyNameInput)
 
   const addBtn = document.createElement('button')
   addBtn.className = 'create-all-btn'
-  addBtn.textContent = 'Add'
+  addBtn.textContent = 'Create story'
   addBtn.addEventListener('click', async () => {
     addBtn.disabled = true
     addBtn.textContent = 'Creating\u2026'
@@ -1817,31 +1855,38 @@ async function buildHighlighterPanel() {
         } finally {
           // The in-place refresh keeps this button alive — reset it.
           addBtn.disabled = false
-          addBtn.textContent = 'Add'
+          addBtn.textContent = 'Create story'
         }
       }
       setTimeout(refreshAfterCreate, 1500)
     } catch {
       addBtn.disabled = false
-      addBtn.textContent = 'Add'
+      addBtn.textContent = 'Create story'
     }
   })
   storyNameRow.appendChild(addBtn)
 
   createSection.appendChild(storyNameRow)
-  root.appendChild(createSection)
 
   // ── Stories section ──
   const storiesSection = document.createElement('div')
   storiesSection.className = 'hl-section hl-stories-section'
 
-  const storiesHdr = document.createElement('div')
-  storiesHdr.className = 'hl-section-hdr'
-  storiesHdr.innerHTML = `<span class="hl-section-title">Stories${matchingStories.length > 0 ? ` <span class="cov-section-count">${matchingStories.length}</span>` : ''}</span>`
-  storiesSection.appendChild(storiesHdr)
-
   const storiesBody = document.createElement('div')
   storiesBody.className = 'hl-stories-body'
+  storiesSection.id = STORIES_PANEL_ID
+  storiesSection.setAttribute('role', 'tabpanel')
+  storiesSection.setAttribute('aria-labelledby', STORIES_TAB_ID)
+  storiesSection.appendChild(createSection)
+
+  const docsBody = docsEntry ? document.createElement('div') : null
+  if (docsBody) {
+    docsBody.className = 'hl-docs-body'
+    docsBody.id = DOCS_PANEL_ID
+    docsBody.setAttribute('role', 'tabpanel')
+    docsBody.setAttribute('aria-labelledby', DOCS_TAB_ID)
+    docsBody.hidden = true
+  }
 
   const sbRunning = await checkStorybook()
 
@@ -1930,34 +1975,41 @@ async function buildHighlighterPanel() {
 
   storiesSection.appendChild(storiesBody)
 
-  // Rebuilding for the component already on screen: swap only the inspector
-  // sections and keep the existing stories section's DOM — recreating (or
-  // even moving) the preview iframes reloads them, which reads as a flash.
+  // A slow index/coverage lookup must not replace a newer selection.
+  if (buildVersion !== highlighterBuildVersion) return
   const existingRoot = pane.querySelector<HTMLElement>(':scope > .hl-root')
-  const existingStories = existingRoot?.querySelector<HTMLElement>(
-    ':scope > .hl-stories-section',
-  )
-  if (
-    existingRoot &&
-    existingStories &&
-    existingRoot.dataset['component'] === comp.meta.filePath
-  ) {
-    while (
-      existingRoot.firstChild &&
-      existingRoot.firstChild !== existingStories
-    ) {
-      existingRoot.removeChild(existingRoot.firstChild)
-    }
-    while (root.firstChild) {
-      existingRoot.insertBefore(root.firstChild, existingStories)
-    }
+  const sameInstance = existingRoot?.dataset['instance'] === comp.id
+  const renderKey = JSON.stringify([matchingStories.map(story => story.id), docsEntry?.id, sbRunning])
+  if (sameInstance && existingRoot.dataset['renderKey'] === renderKey) {
+    existingRoot.querySelector('.hl-hdr')?.replaceWith(hdr)
+    const oldProps = existingRoot.querySelector<HTMLElement>('#hl-properties-panel')
+    oldProps?.replaceChildren(...Array.from(propertiesPanel.childNodes))
+    if (requestedTab) existingRoot.querySelector<HTMLButtonElement>(`[role="tab"][aria-controls="${requestedTab === 'properties' ? 'hl-properties-panel' : requestedTab === 'stories' ? STORIES_PANEL_ID : DOCS_PANEL_ID}"]`)?.click()
     return
   }
-
+  const initialTab = requestedTab ?? (sameInstance ? existingRoot.dataset['detailTab'] as DetailTab : 'properties')
+  root.dataset['instance'] = comp.id
   root.dataset['component'] = comp.meta.filePath
+  root.dataset['renderKey'] = renderKey
+  const tabs = buildDetailTabs(matchingStories.length, !!docsEntry, initialTab, tab => {
+    root.dataset['detailTab'] = tab
+    propertiesPanel.hidden = tab !== 'properties'
+    storiesSection.hidden = tab !== 'stories'
+    if (docsBody && docsEntry) {
+      docsBody.hidden = tab !== 'docs'
+      if (tab === 'docs' && !docsBody.querySelector('iframe')) {
+        const iframe = document.createElement('iframe')
+        iframe.className = 'hl-docs-iframe'
+        iframe.src = `${getStorybookUrl()}/iframe.html?viewMode=docs&id=${encodeURIComponent(docsEntry.id)}`
+        iframe.title = `${comp.meta.componentName} docs`
+        docsBody.appendChild(iframe)
+      }
+    }
+  })
+  root.insertBefore(tabs, propertiesPanel)
   root.appendChild(storiesSection)
-  pane.innerHTML = ''
-  pane.appendChild(root)
+  if (docsBody) root.appendChild(docsBody)
+  pane.replaceChildren(root)
 }
 
 const COPY_ICON = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`
@@ -1979,12 +2031,6 @@ function showHighlighterPopover(
   popover.innerHTML = ''
   popover.dataset['entry'] = `hl-${comp.meta.componentName}`
   const relPath = comp.meta.relativeFilePath || comp.meta.filePath
-
-  popover.appendChild(
-    makePopoverItem(CODE_ICON, 'Open component in editor', () =>
-      openInEditor(comp.meta.filePath),
-    ),
-  )
 
   if (hasStories && storyPath) {
     popover.appendChild(
@@ -2036,11 +2082,11 @@ function init() {
   const rail = document.createElement('div')
   rail.className = 'rail'
 
-  // Storybook tab — full-color logo
+  // Storybook tab — monochrome icon, matching the other rail actions
   const sbBtn = document.createElement('button')
-  sbBtn.className = 'rail-btn rail-sb-btn active'
+  sbBtn.className = 'rail-btn active'
   sbBtn.setAttribute('data-tab', 'storybook')
-  sbBtn.innerHTML = SB_LOGO_FULL
+  sbBtn.innerHTML = SB_TAB_ICON
   sbBtn.title = 'Storybook'
   sbBtn.addEventListener('click', () => switchTab('storybook'))
 
@@ -2061,15 +2107,6 @@ function init() {
   covBtn.title = 'Coverage'
   covBtn.addEventListener('click', () => switchTab('coverage'))
 
-  // Docs button — opens docs in new tab (no panel pane)
-  const docsBtn = document.createElement('button')
-  docsBtn.className = 'rail-btn'
-  docsBtn.innerHTML = DOCS_TAB_ICON
-  docsBtn.title = 'Open Storybook docs'
-  docsBtn.addEventListener('click', () => {
-    window.open(storybookDocsUrl, '_blank')
-  })
-
   // Spacer pushes help to bottom
   const spacer = document.createElement('div')
   spacer.className = 'rail-spacer'
@@ -2085,7 +2122,6 @@ function init() {
   rail.appendChild(sbBtn)
   rail.appendChild(highlightBtn)
   rail.appendChild(covBtn)
-  rail.appendChild(docsBtn)
   rail.appendChild(spacer)
   rail.appendChild(helpBtn)
   app.appendChild(rail)
@@ -2112,6 +2148,9 @@ function init() {
       <div class="about-logo">${SB_LOGO_FULL.replace('width="20" height="20"', 'width="48" height="48"')}</div>
       <div class="about-name">Storybook DevTools</div>
       <div class="about-version">@storybook/experimental-devtools</div>
+      <a id="about-docs-link" class="about-link" href="${esc(storybookDocsUrl)}" target="_blank" rel="noopener noreferrer">
+        ${DOCS_TAB_ICON} Documentation
+      </a>
       <a class="about-link" href="https://github.com/storybookjs/vite-plugin-experimental-storybook-devtools" target="_blank" rel="noopener noreferrer">
         ${CODE_ICON} View on GitHub
       </a>

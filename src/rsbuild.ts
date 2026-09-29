@@ -37,6 +37,8 @@ import {
   type CreateStorybookDevframeDeps,
 } from './context'
 import { createStoryIndexService } from './story-index'
+import { resolveDualStackSidecarPort } from './sidecar-port'
+import createMessagesDevframe from '@devframes/plugin-messages'
 import { createTerminalsDevframe } from '@devframes/plugin-terminals'
 
 export interface StorybookDevtoolsRsbuildOptions
@@ -249,13 +251,24 @@ export function storybookDevtoolsRsbuild(
       api.onBeforeStartDevServer(async ({ server }) => {
         const definition = createStorybookDevframe(deps)
 
+        // A pinned port only binds the family named by `host` below
+        // (127.0.0.1); an unrelated devframe hub can still be listening on
+        // the SAME port number on the other loopback family (::1) — a page
+        // opened at an ambiguous hostname like `localhost` then reaches that
+        // foreign hub instead of this one. Probing both families first means
+        // no other hub owns this port number on either.
+        const sidecarPort = await resolveDualStackSidecarPort()
+
         const hub = initHub({
           base: DEVFRAMES_HUB_BASE,
           // Same Terminals dock `@vitejs/devtools` mounts on the Vite host, so
           // "Open Terminal" reaches the Storybook session here as well.
-          devframes: [definition, createTerminalsDevframe()],
+          devframes: [definition, createTerminalsDevframe(), createMessagesDevframe()],
+          // Keep terminals and shared state off the agent surface; only the
+          // separate, read-only runtime MCP endpoint is exposed.
+          mcp: false,
           ui: createUi(),
-          ws: { sidecar: true },
+          ws: { port: sidecarPort },
           // Node's 'localhost' can bind IPv6-only ([::1]) while browsers on a
           // 127.0.0.1 page dial the sidecar over IPv4 — pin the v4 loopback
           // (same reason the nuxt playground pins vite.server.host).

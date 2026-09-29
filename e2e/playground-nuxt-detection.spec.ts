@@ -62,31 +62,39 @@ test.describe('Nuxt SSR playground detection coverage', () => {
     page,
   }) => {
     await expect
-      .poll(async () => {
-        return page.evaluate(async () => {
-          const dock = document.querySelector('devframes-dock-embedded') as
-            | (HTMLElement & { shadowRoot?: ShadowRoot })
-            | null
-          const shadow = dock?.shadowRoot
-          const html = shadow?.innerHTML || ''
-          const importsResponse = await fetch('/__devtools-client-imports.js')
-          const imports = importsResponse.ok
-            ? await importsResponse.text()
-            : ''
+      .poll(
+        async () => {
+          return page.evaluate(async () => {
+            const dock = document.querySelector('devframes-dock-embedded') as
+              | (HTMLElement & { shadowRoot?: ShadowRoot })
+              | null
+            const shadow = dock?.shadowRoot
+            const html = shadow?.innerHTML || ''
+            const importsResponse = await fetch(
+              '/__devtools-client-imports.js',
+            )
+            const imports = importsResponse.ok
+              ? await importsResponse.text()
+              : ''
 
-          return {
-            hasDock: Boolean(dock),
-            hasUnauthorized: html.includes('Unauthorized'),
-            hasStorybookIcon:
-              html.includes('FF4785') || html.includes('%23FF4785'),
-            hasComponentHighlighterImport: imports.includes(
-              'action:component-highlighter',
-            ),
-            hasMultipleDockButtons:
-              (shadow?.querySelectorAll('button').length || 0) >= 3,
-          }
-        })
-      })
+            return {
+              hasDock: Boolean(dock),
+              hasUnauthorized: html.includes('Unauthorized'),
+              hasStorybookIcon:
+                html.includes('FF4785') || html.includes('%23FF4785'),
+              hasComponentHighlighterImport: imports.includes(
+                'action:component-highlighter',
+              ),
+              hasMultipleDockButtons:
+                (shadow?.querySelectorAll('button').length || 0) >= 3,
+            }
+          })
+        },
+        // Nuxt's dev server and the DevTools client bundle compile lazily on
+        // first hit — allow more than the default 5s poll window for a cold
+        // start (mirrors the 90s wait in common-panel-render-suite.ts).
+        { timeout: 90_000 },
+      )
       .toEqual({
         hasDock: true,
         hasUnauthorized: false,
@@ -103,6 +111,13 @@ test.describe('Nuxt SSR playground detection coverage', () => {
 
     expect(snapshot).toBeTruthy()
     expect(snapshot?.hasUnknownFilePath).toBe(false)
+    const dependencyComponents = await page.evaluate(() =>
+      Array.from((window as any).__componentHighlighterRegistry.values())
+        .map((entry: any) => entry.meta.filePath as string)
+        .filter((file: string) => file.replaceAll('\\', '/').includes('/node_modules/')),
+    )
+    expect(dependencyComponents).toEqual([])
+    expect(snapshot?.uniqueNames.some((name: string) => name.startsWith('NuxtDevtools'))).toBe(false)
     expect(snapshot?.uniqueNames).toEqual(
       expect.arrayContaining([
         'Header',

@@ -1,8 +1,10 @@
 import { test, expect, type Page } from '@playwright/test'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
-import { loadCsf } from 'storybook/internal/csf-tools'
 import { callMcp } from './common-agent-suite'
+import { expectPreviewFormat, expectStoryFileFormat, expectedStoryFormat } from './story-format-helpers'
+
+const storybookUrl = process.env.STORYBOOK_E2E_URL || 'http://localhost:6006'
 
 async function rpc(page: Page, method: string, ...args: unknown[]) {
   return page.evaluate(async ({ method, args }) => {
@@ -14,7 +16,6 @@ async function rpc(page: Page, method: string, ...args: unknown[]) {
 
 test('panel launch, real story writes and preview', async ({ page }, testInfo) => {
   test.setTimeout(180_000)
-  const storybookUrl = `http://localhost:${process.env['E2E_STORYBOOK_PORT'] ?? 6006}`
   const host = testInfo.project.name.replace('-chromium', '')
   const cwd = path.resolve('playground', host)
   const vue = host === 'vue' || host === 'nuxt'
@@ -40,6 +41,12 @@ test('panel launch, real story writes and preview', async ({ page }, testInfo) =
     await dock.dispatchEvent('click')
     const panel = page.frameLocator('devframes-dock-embedded iframe')
     await expect(panel.locator('.rail-btn').first()).toBeVisible({ timeout: 20_000 })
+
+    await panel.locator('.rail-btn[title="Coverage"]').click()
+    await panel.getByRole('searchbox', { name: 'Find components' }).fill('Button')
+    await expect(panel.getByRole('button', { name: 'Create story for Button', exact: true })).toBeVisible()
+    await expect(panel.getByRole('button', { name: 'Generate all', exact: true })).toBeVisible()
+    await panel.locator('.rail-btn[title="Storybook"]').click()
 
     const data = {
       meta: {
@@ -67,16 +74,30 @@ test('panel launch, real story writes and preview', async ({ page }, testInfo) =
         "  await expect(canvas.getByRole('button')).toBeVisible();",
         "  canvasElement.setAttribute('data-peer-review-play', 'passed');", '}'],
     })
+    const batch = await rpc(page, 'component-highlighter:create-stories', [
+      { ...data, storyName: 'Batch one' },
+      { ...data, storyName: 'Batch two' },
+    ])
+    expect(batch).toEqual({ created: 2, failed: 0 })
+    const toasts = page.locator('devframes-dock-embedded .z-dock-toast > div')
+    await expect(toasts.filter({ hasText: 'Created 2 stories' })).toHaveCount(1)
+    await expect(toasts.filter({ hasText: /BatchOne|BatchTwo/ })).toHaveCount(0)
     const source = fs.readFileSync(story, 'utf8')
-    const csf = loadCsf(source, {
-      fileName: story, makeTitle: title => title || 'Review',
-    }).parse()
-    expect(Object.keys(csf._storyExports)).toEqual(['Plain', 'Recorded'])
-    const framework = host === 'next' ? '@storybook/nextjs'
-      : host === 'rsbuild' ? 'storybook-react-rsbuild'
-      : vue ? '@storybook/vue3-vite' : '@storybook/react-vite'
-    expect(source).toContain(`from '${framework}'`)
+    const format = expectedStoryFormat(host)
+    expectPreviewFormat(cwd, format)
+    expectStoryFileFormat(source, story, format, ['Plain', 'Recorded', 'BatchOne', 'BatchTwo'])
+    if (format === 'factory') {
+      expect(source).toContain("import preview from '../../.storybook/preview';")
+    } else {
+      const framework = host === 'next' ? '@storybook/nextjs'
+        : host === 'rsbuild' ? 'storybook-react-rsbuild'
+        : vue ? '@storybook/vue3-vite' : '@storybook/react-vite'
+      expect(source).toContain(`from '${framework}'`)
+    }
     expect(await rpc(page, 'component-highlighter:check-story', { componentPath })).toMatchObject({ hasStory: true })
+
+    // Include a real docs entry to exercise the inspector's lazy Docs pane.
+    fs.writeFileSync(story, source.replace(/component: Button,?/, "component: Button, tags: ['autodocs'],"))
 
     // Only take ownership of the process started by this test.
     expect(await rpc(page, 'component-highlighter:storybook-status')).toMatchObject({ running: false })
@@ -95,10 +116,13 @@ test('panel launch, real story writes and preview', async ({ page }, testInfo) =
     expect(indexResponse.ok()).toBe(true)
     const index = await indexResponse.json()
     const entries = Object.values(index.entries) as Array<{
-      id: string; importPath: string; name: string
+      id: string; type: string; importPath: string; name: string
     }>
-    const recorded = entries.find(entry =>
-      entry.importPath.includes('Button.stories') && entry.name === 'Recorded')
+    const buttonStories = entries.filter(entry =>
+      entry.type === 'story' && entry.importPath.includes('Button.stories'))
+    expect(buttonStories.map(entry => entry.name).sort()).toEqual(
+      ['Batch One', 'Batch Two', 'Plain', 'Recorded'])
+    const recorded = buttonStories.find(entry => entry.name === 'Recorded')
     expect(recorded).toBeTruthy()
     // Prove the complementary Storybook MCP server is reachable on each
     // configured framework, independently of the application runtime MCP.
@@ -123,6 +147,49 @@ test('panel launch, real story writes and preview', async ({ page }, testInfo) =
       const report = tested.content.map((item: { text?: string }) => item.text ?? '').join('\n')
       expect(report).toContain(`## Passing Stories\n\n- ${recorded!.id}`)
     }
+    // Inspector tabs separate props, creation/previews, and the full docs page.
+    await panel.locator('.rail-btn[title="Coverage"]').click()
+    await panel.getByRole('searchbox', { name: 'Find components' }).fill('Button')
+    await panel.getByRole('button', { name: 'View stories for Button', exact: true }).click()
+    await expect(panel.getByRole('tab', { name: /^Stories/ })).toHaveAttribute('aria-selected', 'true')
+    await panel.getByRole('tab', { name: 'Properties', exact: true }).click()
+    const selection = await page.evaluate(() => {
+      const entries = [...(window as any).__componentHighlighterRegistry.values()]
+      const entry = entries.find((entry: any) => entry.meta.componentName === 'Button')
+      return { id: entry.id, meta: entry.meta, serializedProps: entry.serializedProps, isConnected: true }
+    })
+    await rpc(page, 'component-highlighter:select-component', selection)
+    await expect(panel.getByRole('tab', { name: 'Properties', exact: true })).toHaveAttribute('aria-selected', 'true')
+    await expect(panel.locator('.hl-docs-iframe')).toHaveCount(0)
+    await panel.getByRole('tab', { name: 'Docs', exact: true }).click()
+    const docs = panel.locator('.hl-docs-iframe')
+    await expect(docs).toBeVisible()
+    await expect(docs).toHaveAttribute('src', /viewMode=docs&id=/)
+    await docs.evaluate(el => el.setAttribute('data-preserved', 'true'))
+    await panel.getByRole('tab', { name: /^Stories/ }).click()
+    await expect(docs).toBeHidden()
+    const nameInput = panel.getByRole('textbox', { name: 'Story name' })
+    await nameInput.fill('Unsaved draft')
+    await panel.getByRole('tab', { name: 'Properties', exact: true }).click()
+    // A props refresh must retain pane state and avoid replacing loaded iframes.
+    await rpc(page, 'component-highlighter:select-component', {
+      ...selection, serializedProps: { ...selection.serializedProps, designCheck: 'updated' },
+    })
+    await expect(panel.locator('#hl-properties-panel')).toContainText('designCheck')
+    await panel.getByRole('tab', { name: 'Docs', exact: true }).click()
+    await expect(docs).toBeVisible()
+    await expect(docs).toHaveAttribute('data-preserved', 'true')
+    await panel.getByRole('tab', { name: /^Stories/ }).click()
+    await expect(nameInput).toHaveValue('Unsaved draft')
+    await expect(panel.locator('#hl-properties-panel')).toBeHidden()
+    // A new instance resets to Properties, with unavailable Docs omitted.
+    await rpc(page, 'component-highlighter:select-component', {
+      ...selection, id: 'no-docs-selection',
+      meta: { ...selection.meta, componentName: 'NoDocs', filePath: '/NoDocs.tsx', relativeFilePath: 'NoDocs.tsx' },
+    })
+    await expect(panel.getByRole('tab', { name: 'Properties', exact: true })).toHaveAttribute('aria-selected', 'true')
+    await expect(panel.getByRole('tab', { name: 'Docs', exact: true })).toHaveCount(0)
+    await expect(panel.getByRole('tab', { name: /^Stories/ })).toBeVisible()
 
     // External deletion must be visible even outside the app import graph.
     fs.unlinkSync(story)

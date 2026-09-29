@@ -1,6 +1,5 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { DevTools } from '@vitejs/devtools'
 import { defineNuxtConfig } from 'nuxt/config'
 
 import componentHighlighter, {
@@ -44,16 +43,17 @@ export default defineNuxtConfig({
       host: '127.0.0.1',
     },
     devtools: {
-      enabled: true,
+      enabled: !isStorybook,
       clientAuth: false,
     },
+    // Nuxt 4.5 forwards Vite's native devtools option. Adding DevTools()
+    // here as well would register the host twice.
     plugins: [
-      isStorybook ? null : DevTools(),
       isStorybook
         ? null
         : componentHighlighter({
             agent: { token: process.env['STORYBOOK_DEVTOOLS_MCP_TOKEN'] ?? 'playground-only' },
-            storybookUrl: `http://localhost:${process.env['E2E_STORYBOOK_PORT'] ?? 6006}`,
+            storybookUrl: process.env.STORYBOOK_E2E_URL || 'http://localhost:6006',
             debugMode: false,
           }),
     ].filter(Boolean),

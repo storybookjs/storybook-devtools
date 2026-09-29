@@ -28,6 +28,7 @@ import {
 } from './coverage-actions'
 import { isCurrentlyRecording } from './interaction-recorder'
 import { warn } from './logger'
+import { installNotificationStyles } from './notification-styles'
 import {
   createHighlightActor,
   getHighlightActor,
@@ -125,7 +126,7 @@ function pushFullRegistry() {
  */
 let rpcHandlersRegistered = false
 
-function autoInitRpc() {
+export function autoInitRpc() {
   if (rpcCallFn && rpcHandlersRegistered) return
 
   let attempts = 0
@@ -339,7 +340,7 @@ function autoInitRpc() {
       setTimeout(tryInit, 500)
     }
   }
-  setTimeout(tryInit, 500)
+  tryInit()
 }
 
 function serializeInstance(
@@ -775,6 +776,7 @@ function initialize() {
     actor.getSnapshot().context.mode === 'panel'
 
   // Start auto-initialization of RPC
+  installNotificationStyles()
   autoInitRpc()
 }
 

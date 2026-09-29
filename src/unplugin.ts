@@ -71,11 +71,15 @@ export interface ComponentHighlighterUnpluginHost {
    * Wired via unplugin's `watchChange` hook, which fires in dev/watch mode
    * on Vite, Rsbuild/rspack, and Next/webpack alike.
    */
-  onStoryFileChange?: (filePath: string, event: 'create' | 'update' | 'delete') => void
+  onStoryFileChange?: (
+    filePath: string,
+    event: 'create' | 'update' | 'delete',
+  ) => void
 }
 
 /** Virtual module whose body is the framework's inline devtools-hook script, for the `entry` hook-injection strategy. */
-export const DEVTOOLS_HOOK_VIRTUAL_ID = 'virtual:component-highlighter/devtools-hook'
+export const DEVTOOLS_HOOK_VIRTUAL_ID =
+  'virtual:component-highlighter/devtools-hook'
 const RESOLVED_DEVTOOLS_HOOK_VIRTUAL_ID = `\0${DEVTOOLS_HOOK_VIRTUAL_ID}`
 const DEVTOOLS_HOOK_IMPORT_STATEMENT = `import '${DEVTOOLS_HOOK_VIRTUAL_ID}'\n`
 
@@ -172,12 +176,6 @@ function buildComponentHighlighterUnpluginOptions(
 
   const paths = getComponentHighlighterRuntimePaths(framework)
 
-  const logDebug = (...args: unknown[]) => {
-    if (debugMode) {
-      console.log('[component-highlighter]', ...args)
-    }
-  }
-
   function runTransform(
     code: string,
     id: string,
@@ -218,8 +216,6 @@ function buildComponentHighlighterUnpluginOptions(
     if (!framework.detect(workingCode, id)) {
       return mutated ? workingCode : undefined
     }
-
-    logDebug(`Transforming ${id}`)
 
     const result = framework.transform(workingCode, id, {
       rsc,

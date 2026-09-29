@@ -54,7 +54,7 @@ export function registerAgentSuite() {
       expect(inspected.instance.meta.componentName).toBe('TaskList')
       expect(inspected.instance.serializedProps).toBeDefined()
       expect(inspected.instance.meta.filePath).toContain('TaskList')
-      expect(inspected.storybook.mcpUrl).toBe(`http://localhost:${process.env['E2E_STORYBOOK_PORT'] ?? 6006}/mcp`)
+      expect(inspected.storybook.mcpUrl).toBe(`${process.env.STORYBOOK_E2E_URL || 'http://localhost:6006'}/mcp`)
       expect(Date.now() - Date.parse(inspected.capturedAt)).toBeLessThan(10_000)
       const gaps = await call('get-story-gaps', { pageId: target.pageId })
       expect(gaps.status).toBe('ok')

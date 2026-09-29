@@ -2,17 +2,17 @@ import { describe, it, expect } from 'vitest'
 import { transform, detectVue, VIRTUAL_MODULE_ID } from './transform'
 
 // The Vue transform is non-intrusive: it does NOT reconstruct the SFC or inject
-// any per-component tracking code. Detection happens entirely at runtime via the
+// wrappers. A source allowlist keeps dependency components out; detection uses the
 // Vue DevTools global hook (devtools-hook.ts + runtime-module.ts). The transform
 // performs exactly one minimal, idempotent edit — prepending a single
-// side-effect import of the runtime virtual module to the SFC's script block so
+// runtime import and source registration to the SFC's script block so
 // the runtime is loaded into the page. Everything else is preserved verbatim.
 
-const RUNTIME_IMPORT = `import '${VIRTUAL_MODULE_ID}';`
+const RUNTIME_IMPORT = `import { registerComponentSource as __chRegisterSource } from '${VIRTUAL_MODULE_ID}';`
 
 describe('Vue transform (non-intrusive)', () => {
   describe('runtime import injection', () => {
-    it('injects a side-effect runtime import into <script setup>', () => {
+    it('registers the source and imports the runtime into <script setup>', () => {
       const code = `<script setup lang="ts">
 import { ref } from 'vue'
 const count = ref(0)
@@ -26,8 +26,8 @@ const count = ref(0)
 
       expect(result).toBeDefined()
       expect(result).toContain(RUNTIME_IMPORT)
-      // It is a bare side-effect import — no named binding, no meta object, no
-      // wrapping composable.
+      expect(result).toContain('__chRegisterSource("/src/components/Counter.vue");')
+      // No component metadata object or wrapping composable.
       expect(result).not.toContain('withComponentHighlighter')
       expect(result).not.toContain('__componentMeta')
     })
@@ -202,7 +202,7 @@ const x = 1
       expect(result).toContain('.global { color: red; }')
     })
 
-    it('only adds the import — the rest of the file is byte-identical', () => {
+    it('only adds source registration — the rest of the file is byte-identical', () => {
       const code = `<script setup lang="ts">
 const x = 1
 </script>
@@ -213,9 +213,9 @@ const x = 1
 `
       const result = transform(code, '/src/components/Exact.vue')
       expect(result).toBeDefined()
-      // Removing the single injected import must restore the original source
+      // Removing the injected import and registration restores the source
       // exactly (proves no other byte was touched).
-      expect(result!.replace(RUNTIME_IMPORT, '')).toBe(code)
+      expect(result!.replace(RUNTIME_IMPORT + '__chRegisterSource("/src/components/Exact.vue");', '')).toBe(code)
     })
   })
 
