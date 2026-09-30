@@ -133,7 +133,7 @@ test('panel launch, real story writes and preview', async ({ page }, testInfo) =
     )
     await preview.close()
 
-    // Inspector tabs separate props, creation/previews, and the full docs page.
+    // Inspector tabs share one story draft and creation action.
     await panel.locator('.rail-btn[title="Coverage"]').click()
     await panel.getByRole('searchbox', { name: 'Find components' }).fill('Button')
     await panel.getByRole('button', { name: 'View stories for Button', exact: true }).click()
@@ -162,12 +162,31 @@ test('panel launch, real story writes and preview', async ({ page }, testInfo) =
       ...selection, serializedProps: { ...selection.serializedProps, designCheck: 'updated' },
     })
     await expect(panel.locator('#hl-properties-panel')).toContainText('designCheck')
+    await expect(nameInput).toHaveValue('Unsaved draft')
+    await expect(panel.getByRole('button', { name: 'Create story', exact: true })).toBeVisible()
     await panel.getByRole('tab', { name: 'Docs', exact: true }).click()
     await expect(docs).toBeVisible()
     await expect(docs).toHaveAttribute('data-preserved', 'true')
+    await expect(nameInput).toHaveValue('Unsaved draft')
     await panel.getByRole('tab', { name: /^Stories/ }).click()
     await expect(nameInput).toHaveValue('Unsaved draft')
     await expect(panel.locator('#hl-properties-panel')).toBeHidden()
+    // Edit a live prop and save directly from Properties, without switching tabs.
+    await panel.getByRole('tab', { name: 'Properties', exact: true }).click()
+    const editedVariant = selection.serializedProps.variant === 'primary' ? 'secondary' : 'primary'
+    await panel.getByTitle('Edit variant live', { exact: true }).click()
+    await panel.locator('.hl-prop-edit-form input').fill(editedVariant)
+    await panel.locator('.hl-prop-edit-save').click()
+    await expect.poll(() => page.evaluate((id) =>
+      (window as any).__componentHighlighterRegistry.get(id)?.serializedProps.variant,
+    selection.id)).toBe(editedVariant)
+    await expect(panel.getByTitle('Reset variant to original', { exact: true })).toBeVisible()
+    await expect(nameInput).toHaveValue('Unsaved draft')
+    await nameInput.fill('Edited from properties')
+    await panel.getByRole('button', { name: 'Create story', exact: true }).click()
+    await expect.poll(() => fs.readFileSync(story, 'utf8')).toContain('export const EditedFromProperties')
+    expect(fs.readFileSync(story, 'utf8').split('export const EditedFromProperties')[1]).toMatch(new RegExp(`variant:\\s*["']${editedVariant}["']`))
+    await expect(panel.getByRole('tab', { name: 'Properties', exact: true })).toHaveAttribute('aria-selected', 'true')
     // A new instance resets to Properties, with unavailable Docs omitted.
     await rpc(page, 'component-highlighter:select-component', {
       ...selection, id: 'no-docs-selection',

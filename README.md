@@ -254,7 +254,10 @@ props, or **Create with Interactions** to record clicks, typing, and selections
 first and generate a story with a play function.
 
 Use the inspector's **Stories** tab for previews and **Docs** for available
-component documentation.
+component documentation. The story name and **Create story** button stay visible
+in a shared footer across all inspector tabs, so you can edit live props in
+**Properties** and save them without switching tabs. Your draft name is preserved
+while switching tabs or refreshing the same component instance.
 
 Stories are saved alongside the component as `<ComponentName>.stories.ts`
 for Vue or `<ComponentName>.stories.tsx` for React. New files use CSF3, or

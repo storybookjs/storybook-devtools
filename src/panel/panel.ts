@@ -1770,7 +1770,7 @@ async function buildHighlighterPanel() {
 
   // ── Story creation ──
   const createSection = document.createElement('div')
-  createSection.className = 'hl-section'
+  createSection.className = 'hl-create-story'
 
   const createHdr = document.createElement('div')
   createHdr.className = 'hl-section-hdr'
@@ -1815,7 +1815,7 @@ async function buildHighlighterPanel() {
         meta: latest.meta,
         serializedProps: latest.serializedProps,
         storyName: requestedName || undefined,
-        // Stay on this view: the new story appears in the list below
+        // Stay on this view: the new story appears in the Stories tab
         // instead of the panel jumping to the Storybook tab.
         skipNavigation: true,
       })
@@ -1877,7 +1877,6 @@ async function buildHighlighterPanel() {
   storiesSection.id = STORIES_PANEL_ID
   storiesSection.setAttribute('role', 'tabpanel')
   storiesSection.setAttribute('aria-labelledby', STORIES_TAB_ID)
-  storiesSection.appendChild(createSection)
 
   const docsBody = docsEntry ? document.createElement('div') : null
   if (docsBody) {
@@ -2009,6 +2008,11 @@ async function buildHighlighterPanel() {
   root.insertBefore(tabs, propertiesPanel)
   root.appendChild(storiesSection)
   if (docsBody) root.appendChild(docsBody)
+  // Creation belongs to the selected instance, not an individual tab. Keep
+  // the same form across index refreshes too, preserving drafts and saves.
+  root.appendChild(
+    (sameInstance && existingRoot.querySelector('.hl-create-story')) || createSection,
+  )
   pane.replaceChildren(root)
 }
 

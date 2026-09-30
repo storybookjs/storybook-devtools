@@ -180,7 +180,11 @@ survives coverage refreshes. Generate all has a panel-wide in-flight guard.
 The Component Highlighter detail pane uses peer Properties, Stories, and Docs
 tabs (`buildDetailTabs`) with ARIA tab/panel relationships and roving keyboard
 focus. Properties is the default for a new component instance; Stories contains
-creation and live previews. Docs is omitted unless the index has a matching
+live previews. A shared `.hl-create-story` footer keeps the story name and creation
+action visible across all three tabs, outside their scrolling panes. The same
+form is retained across index rebuilds for the same instance to preserve drafts
+and in-flight saves. Creation reads the latest props from the registry.
+Docs is omitted unless the index has a matching
 entry. Selecting Docs lazily creates one iframe
 (`<storybookUrl>/iframe.html?viewMode=docs&id=<docsEntryId>`). Tabs hide/show their
 panes without recreating them. Refreshing props for the same instance preserves

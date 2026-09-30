@@ -165,7 +165,9 @@ ctx.rpc.requestTrustWithToken(token);
 - Launch: "Start Storybook" never opens a browser tab (`BROWSER=none` in the
   child env; Storybook 11 builds that dropped `--no-open` reject that flag)
 - Inspector tabs: Properties is the default for a new component instance;
-  Stories owns creation and previews. Docs appears only for a matching autodocs
+  Stories owns previews. A shared footer keeps story creation available while
+  editing Properties or browsing Stories/Docs. Verify saving edited props from
+  Properties and footer visibility while scrolling. Docs appears only for a matching autodocs
   or attached MDX entry. Verify arrows/Home/End, one lazy docs iframe retained
   across tab switches and prop refreshes, and draft name preservation for the
   same selection (`buildDetailTabs` in `src/panel/panel.ts`).

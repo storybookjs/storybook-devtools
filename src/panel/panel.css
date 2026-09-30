@@ -522,6 +522,13 @@ html, body, #app {
   min-width: 0;
 }
 
+/* Shared footer stays reachable while Properties, Stories, or Docs scroll. */
+.hl-create-story {
+  flex-shrink: 0;
+  border-top: 1px solid var(--sb-bordercolor-default);
+  background: var(--sb-bgcolor-default);
+}
+
 /* Component list (shared by Missing and Covered sections) */
 .cov-list-wrap {
   flex: 1;
@@ -1208,4 +1215,3 @@ html, body, #app {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
