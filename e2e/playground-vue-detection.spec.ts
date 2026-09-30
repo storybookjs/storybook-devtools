@@ -1,3 +1,4 @@
+import { registerAgentSuite } from './common-agent-suite'
 import { registerPanelRenderSuite } from './common-panel-render-suite'
 import { test, expect } from '@playwright/test'
 import { registerCommonHighlighterSuite } from './common-highlighter-suite'
@@ -112,4 +113,5 @@ registerLivePropEditSuite(test as any, {
 })
 registerListenersReplaySuite(test as any)
 
+registerAgentSuite()
 registerPanelRenderSuite(test as any, expect as any, { componentName: 'TaskCard' })

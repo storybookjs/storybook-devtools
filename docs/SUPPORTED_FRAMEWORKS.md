@@ -21,6 +21,13 @@ Vite: `./react`, `./vue`, or the unified `./vite` entry. Rsbuild: `./rsbuild`
 (`withStorybookDevtools()`). See the README's per-host sections for setup
 and host-specific options.
 
+The read-only runtime MCP MVP is exercised across all six playgrounds, including
+React 18 and both SSR hosts. Storybook MCP is installed in the five playgrounds
+with Storybook configuration; React 18 retains its intentional no-config fallback.
+MCP story tests use isolated Vitest browser projects on React, Vue and Nuxt.
+The rendered-page component-tree tool is React-only initially, covering React
+18/19 on Vite, Rsbuild and Next. Vue/Nuxt report unsupported rather than an empty tree.
+See [agent setup and evidence limits](./AGENT_MVP.md).
 The shared browser suite exercises first-click highlighter activation and
 repeated close/reopen through the actual dock on all six playgrounds. A separate
 serial suite launches Storybook and verifies generated stories and previews on

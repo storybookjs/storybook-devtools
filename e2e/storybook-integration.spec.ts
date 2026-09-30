@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
+import { callMcp } from './common-agent-suite'
 import { expectPreviewFormat, expectStoryFileFormat, expectedStoryFormat } from './story-format-helpers'
 
 const storybookUrl = process.env.STORYBOOK_E2E_URL || 'http://localhost:6006'
@@ -123,6 +124,10 @@ test('panel launch, real story writes and preview', async ({ page }, testInfo) =
       ['Batch One', 'Batch Two', 'Plain', 'Recorded'])
     const recorded = buttonStories.find(entry => entry.name === 'Recorded')
     expect(recorded).toBeTruthy()
+    // Prove the complementary Storybook MCP server is reachable on each
+    // configured framework, independently of the application runtime MCP.
+    const mcp = await callMcp(page.request, `${storybookUrl}/mcp`, 'tools/list')
+    expect(mcp.tools.some((tool: any) => tool.name === 'get-storybook-story-instructions')).toBe(true)
     const preview = await page.context().newPage()
     await preview.goto(`${storybookUrl}/iframe.html?id=${recorded!.id}&viewMode=story`)
     await expect(preview.getByRole('button', {
@@ -133,6 +138,15 @@ test('panel launch, real story writes and preview', async ({ page }, testInfo) =
     )
     await preview.close()
 
+    // Advertising a tool is insufficient: supported Vite hosts must execute it.
+    if (['react', 'vue', 'nuxt'].includes(host)) {
+      const tested = await callMcp(page.request, `${storybookUrl}/mcp`, 'tools/call', {
+        name: 'test-run', arguments: { stories: [{ storyId: recorded!.id }], a11y: false },
+      })
+      expect(tested.isError, JSON.stringify(tested)).not.toBe(true)
+      const report = tested.content.map((item: { text?: string }) => item.text ?? '').join('\n')
+      expect(report).toContain(`## Passing Stories\n\n- ${recorded!.id}`)
+    }
     // Inspector tabs separate props, creation/previews, and the full docs page.
     await panel.locator('.rail-btn[title="Coverage"]').click()
     await panel.getByRole('searchbox', { name: 'Find components' }).fill('Button')

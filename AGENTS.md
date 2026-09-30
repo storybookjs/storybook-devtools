@@ -190,6 +190,20 @@ pnpm exec playwright test
 Build before tests: runtime-helper tests and Next/Rsbuild load `dist`.
 Do not build concurrently with tests; the build clears that directory.
 
+Runtime MCP changes must also preserve the shared `e2e/common-agent-suite.ts`
+coverage on all six hosts: page-scoped identity, fresh snapshots, closed pages,
+read-only tool discovery with no `agent` option or bearer header, and Origin
+rejection. Protocol tests must also verify optional token enforcement. The rendered
+component tree is React-only initially: verify ancestry, offscreen membership, stable IDs, modal
+mount/unmount, and explicit unsupported Vue/Nuxt responses in the shared agent
+suite. Tree unit tests additionally cover
+portals, fragments, text output, transparent ancestors and truncation. Runtime
+MCP complements Storybook MCP; validate the latter through the serial suite below.
+If unrelated projects occupy the standard playground ports, set
+`PLAYWRIGHT_PORT_OFFSET=1000` on the Playwright
+commands; this moves the app servers to 6173–6178. Set `STORYBOOK_E2E_URL=http://localhost:6016`
+to move the serial suite's Storybook server too. Keep that port free.
+
 For Storybook peer, indexing, generation, or launcher changes, also run:
 
 ```bash
@@ -199,6 +213,8 @@ pnpm exec playwright test --config=playwright.storybook.config.ts
 This serial suite uses port 6006, starts Storybook through the panel,
 backs up a component's story file, creates and appends stories through RPC,
 runs the generated play function in a preview, and checks external deletion.
+It also checks Storybook MCP discovery and executes the generated story through
+`test-run` on React, Vue and Nuxt, asserting a passing-story report.
 It restores the exact original file and stops its own PTY. Keep port 6006
 free before running it. React 18 has no
 `.storybook` config: it checks fallback coverage and the launch failure UI.
@@ -227,10 +243,10 @@ Run validation against the Storybook 11 version pinned in the workspace
 (currently `11.0.0-alpha.1`), using `pnpm install --frozen-lockfile`.
 CI runs this same version without a version matrix or dependency re-pinning.
 
-The playgrounds' own Vitest story projects are not wired into
-`pnpm --filter <playground> test` (the config nests `test.test`, so Vitest
-finds no files); run them through a config with a top-level `storybookTest`
-plugin when a change needs that check.
+React, Vue and Nuxt have dedicated `vitest.config.ts` files with a top-level
+`storybookTest` plugin so Storybook MCP can execute browser story tests.
+Storybook 11 supplies preview annotations through that plugin; do not reference
+the removed `.storybook/vitest.setup.ts` files.
 
 CI runs the build, unit tests, typecheck, and both browser suites on Node 24.
 The regular browser suite uses two CI workers across independent hosts;

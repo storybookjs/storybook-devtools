@@ -6,7 +6,9 @@ const config: StorybookConfig = {
     '@storybook/addon-vitest',
     '@storybook/addon-a11y',
     '@storybook/addon-docs',
+    '@storybook/addon-mcp',
   ],
+  features: { experimentalComponentsManifest: true },
   framework: '@storybook/react-vite',
 }
 export default config

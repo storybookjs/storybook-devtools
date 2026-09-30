@@ -1,3 +1,4 @@
+import { registerAgentSuite } from './common-agent-suite'
 import { test, expect, type Page } from '@playwright/test'
 import { registerCommonHighlighterSuite } from './common-highlighter-suite'
 import { registerHighlightPanelStateSuite } from './common-highlight-panel-state-suite'
@@ -168,3 +169,5 @@ registerSsrSuite(test as any, expect as any, {
   markerText: 'initially server-rendered at',
 })
 registerPanelRenderSuite(test as any, expect as any, { componentName: 'TaskCard' })
+
+registerAgentSuite()

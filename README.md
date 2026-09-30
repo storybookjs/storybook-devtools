@@ -4,6 +4,7 @@ Dev-server devtools for visual component highlighting and automatic Storybook st
 
 ## Features
 
+- Give agents live component context, a React component tree, and story gaps through [runtime MCP](./docs/AGENT_MVP.md).
 - Highlight components and inspect or edit their live props.
 - Create stories from current props, including JSX children and Vue slots.
 - Record interactions and generate Storybook play functions.

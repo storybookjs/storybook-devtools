@@ -4,6 +4,14 @@ import { join } from 'node:path'
 import { expect, it } from 'vitest'
 import { babelParse } from 'storybook/internal/babel'
 
+it('installs the MCP implementation required by the devframe adapter', async () => {
+  const pkg = JSON.parse(await readFile('package.json', 'utf8'))
+  const devframe = JSON.parse(await readFile('node_modules/devframe/package.json', 'utf8'))
+  // devframe/adapters/mcp re-exports this optional peer. A consumer using
+  // Next or Rsbuild must not depend on Vite's workspace hoisting to load it.
+  expect(pkg.dependencies['@devframes/agentic']).toBe(devframe.peerDependencies['@devframes/agentic'])
+})
+
 it('declares the external runtime imports shipped in dist', async () => {
   const pkg = JSON.parse(await readFile('package.json', 'utf8'))
   const declared = new Set(Object.keys({ ...pkg.dependencies, ...pkg.peerDependencies }))

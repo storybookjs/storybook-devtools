@@ -17,6 +17,7 @@ import type { RsbuildPlugin, RsbuildPluginAPI } from '@rsbuild/core'
 import { initHub, DEVFRAMES_HUB_BASE } from '@devframes/hub/initiate'
 import { createUi } from '@devframes/hub-ui'
 import type { ComponentHighlighterOptions } from './create-component-highlighter-plugin'
+import { createRuntimeMcp, runtimeMcpMiddleware } from './agent-mcp'
 import { reactFramework } from './frameworks/react'
 import { vueFramework } from './frameworks/vue'
 import {
@@ -263,10 +264,8 @@ export function storybookDevtoolsRsbuild(
           // Same Terminals dock `@vitejs/devtools` mounts on the Vite host, so
           // "Open Terminal" reaches the Storybook session here as well.
           devframes: [definition, createTerminalsDevframe(), createMessagesDevframe()],
-          // The Terminals devframe exposes an agent-callable tool, which
-          // would otherwise make the hub warn (DF0078) about the missing
-          // optional `@devframes/agentic` peer; out of scope for the
-          // DevTools panel.
+          // Keep terminals and shared state off the agent surface; only the
+          // separate, read-only runtime MCP endpoint is exposed.
           mcp: false,
           ui: createUi(),
           ws: { port: sidecarPort },
@@ -289,6 +288,12 @@ export function storybookDevtoolsRsbuild(
           },
         })
 
+        if (pluginOptions.agent !== false) {
+          const agentOptions = pluginOptions.agent
+          const mcp = await createRuntimeMcp(await hub.context, deps, agentOptions)
+          server.middlewares.use(runtimeMcpMiddleware(async () => mcp))
+          api.onCloseDevServer(() => mcp.dispose())
+        }
         server.middlewares.use(hub.nodeMiddleware)
         server.middlewares.use(createClientBundleMiddleware(packageRoot))
 

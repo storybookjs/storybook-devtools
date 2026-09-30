@@ -109,6 +109,7 @@
     "vitest": "^4.1.11"
   },
   "dependencies": {
+    "@devframes/agentic": "1.1.0",
     "@devframes/hub": "^1.1.0",
     "@devframes/hub-ui": "^1.1.0",
     "@devframes/next": "1.1.0",

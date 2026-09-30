@@ -4,6 +4,7 @@ import * as path from 'path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   composeNextHookScript,
+  createStorybookDevtoolsRoute,
   getNextDevToolsHookScript,
   nextFramework,
   PersistedComponentMap,
@@ -12,6 +13,7 @@ import {
   type NextConfigWebpackShape,
 } from './next'
 import { getDevToolsHookScript } from './frameworks/react/devtools-hook'
+import * as sidecarPorts from './sidecar-port'
 
 interface WebpackConfig {
   plugins?: unknown[]
@@ -35,6 +37,21 @@ function callWebpack(
 }
 
 describe('nextFramework', () => {
+  it('does not expose runtime MCP in production even when opted in', async () => {
+    const previous = process.env['NODE_ENV']
+    const allocatePort = vi.spyOn(sidecarPorts, 'resolveDualStackSidecarPort').mockResolvedValue(19880)
+    process.env['NODE_ENV'] = 'production'
+    try {
+      const route = createStorybookDevtoolsRoute({ agent: { token: 'test' } })
+      const response = await route.POST(new Request('http://localhost/__devframes/storybook-devtools/mcp', { method: 'POST' }))
+      expect(response.status).toBe(404)
+      expect(allocatePort).not.toHaveBeenCalled()
+    } finally {
+      allocatePort.mockRestore()
+      if (previous === undefined) delete process.env['NODE_ENV']
+      else process.env['NODE_ENV'] = previous
+    }
+  })
   it('uses @storybook/nextjs for story generation', () => {
     expect(nextFramework.storybookFramework).toBe('@storybook/nextjs')
     expect(nextFramework.name).toBe('react')

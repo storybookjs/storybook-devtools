@@ -11,6 +11,7 @@
  * works with React Server Components (only tagged client components appear).
  */
 import React from 'react'
+import { captureReactComponentTree } from './component-tree'
 import reactElementToJSXString from 'react-element-to-jsx-string/dist/esm/index.js'
 import {
   attachRectObservers,
@@ -471,6 +472,8 @@ function getStableId(fiber: Fiber, meta: Meta): string {
 
 // Track which ids each root currently owns + per-instance rect observers.
 const rootLiveIds = new WeakMap<object, Set<string>>()
+// Retain only roots with tracked instances; an unmount commit removes them.
+const treeRoots = new Set<Fiber>()
 const rectDisconnects = new Map<string, () => void>()
 const instanceElements = new Map<string, Element | null>()
 
@@ -598,6 +601,19 @@ function walkRoot(root: Fiber) {
   }
 
   rootLiveIds.set(root, nextIds)
+  if (nextIds.size) treeRoots.add(root)
+  else treeRoots.delete(root)
+}
+
+function getRenderedComponentTree(maxNodes = 500) {
+  const identities = new Map()
+  for (const [id, fiber] of fibersById) {
+    const instance = componentRegistry.get(id)
+    if (instance) identities.set(fiber, { id, meta: instance.meta })
+  }
+  return captureReactComponentTree(
+    Array.from(treeRoots, root => root.current), identities, maxNodes,
+  )
 }
 
 function handleCommit(rendererId: number, root: Fiber) {
@@ -674,6 +690,11 @@ onListenersReady(() => {
 })
 
 if (typeof window !== 'undefined') {
+  // Queried by the existing trusted client RPC. No props or DOM references
+  // leave this getter; connection state is sampled on each request.
+  ;(window as unknown as {
+    __componentHighlighterGetComponentTree?: typeof getRenderedComponentTree
+  }).__componentHighlighterGetComponentTree = getRenderedComponentTree
   const install = (
     window as unknown as {
       __chInstallCommitHandler?: (

@@ -437,6 +437,47 @@ replace there.
 
 ## Bundler hosts
 
+### Runtime MCP
+
+`src/agent.ts` defines four read-only tools: app context, exact instance
+inspection, rendered React component tree, and mounted story gaps. `src/agent-mcp.ts` serves Devframe's MCP
+adapter from an isolated agent context; its closures query the existing host
+RPC. No hub commands, write RPCs, or shared-state resources are exposed. The
+`agent` plugin option defaults to enabled without a bearer token. Set it to
+`false` to disable, or supply `{ token }` to require authentication. Next accepts
+this option on its route factory. The loopback Origin gate remains enabled;
+Vite/Nuxt/Rsbuild additionally enforce a loopback socket peer. They mount
+`/__storybook-devtools/mcp`; Next mounts `<hub-base>storybook-devtools/mcp`.
+
+The runtime MCP adapter is imported lazily through `devframe/adapters/mcp`.
+Devframe 1.1 delegates to `@devframes/agentic`, declared as a runtime dependency
+so non-Vite consumers can load it. Next waits for the asynchronous hub startup
+before creating the isolated agent context. Production Next routes return 404 before allocating a sidecar or creating any
+context. The aggregate Next/Rsbuild hub MCP
+stays disabled to keep terminal tools and shared state off this endpoint.
+
+`listeners.ts` registers the `component-highlighter:runtime-snapshot` client
+query. Snapshots have a random per-page ID, URL without query/fragment, capture time,
+selected instance ID, and DOM-connected instances. The server enumerates current
+peers using the RPC broadcast filter and queries each with a two-second bound,
+avoiding the shared registry's cross-tab replacement behavior. Props are returned
+only for exact instance inspection, with payload limits. `StoryIndex.source`
+reports `storybook`, `scan`, or `stale`; stale indexes cannot establish gaps.
+See [the MVP contract and limitations](./AGENT_MVP.md).
+
+For tree requests, the React runtime exposes
+`window.__componentHighlighterGetComponentTree(maxNodes = 500)`. It retains roots
+with instrumented instances, removes empty roots on unmount commits, and uses
+`src/frameworks/react/component-tree.ts` to traverse current fibers. The existing
+`fibersById` map supplies identities (including memo/forwardRef deduplication).
+DOM-connected element/text output marks a component and its ancestors as
+rendered; there are no layout or viewport checks. Parent-first output is capped
+without orphaning descendants. The snapshot RPC advertises support per page and
+includes this tree only when requested. Exact React inspection also checks the
+rendered tree, so transparent wrappers/text-only components remain inspectable
+without changing the highlighter's DOM-anchor registry behavior. Other runtimes
+return an explicit unsupported status from the tree tool.
+
 | Host | Entry file | Instrumentation mount | Hook delivery | Dock/panel serving |
 |------|-----------|------------------------|---------------|---------------------|
 | Vite | `src/create-component-highlighter-plugin.ts` | `unplugin.vite()`, plus Vite-only hooks (`config`, `configResolved`, `configureServer`, `transformIndexHtml`, `handleHotUpdate`) | `'html'` via `transformIndexHtml`, or `'entry'` | devframe mounted through Vite's own dev server; dock client resolved via Vite's `/@id/{specifier}` |
@@ -455,7 +496,7 @@ Notes:
 
 ## Server RPC surface
 
-There is no HTTP middleware. Every server routine is a `devframe` RPC
+Panel operations use RPC rather than individual HTTP endpoints. Each routine is a `devframe` RPC
 function, one file per function under `src/rpc/functions/`, collected by
 `src/rpc/index.ts` into `serverFunctions`. Functions declare bare names; the
 `component-highlighter` scope namespaces them on the wire (e.g. `create-story`

@@ -58,6 +58,7 @@ declare module 'devframe' {
   interface DevframeRpcServerFunctions extends DevframeRpcServerFunctionsShape {}
 
   interface DevframeRpcClientFunctions {
+    'component-highlighter:runtime-snapshot': (query: import('../agent').RuntimeQuery) => import('../agent').RuntimePage | null
     'component-highlighter:do-scroll-to-component': (data: {
       componentName: string
       id?: string

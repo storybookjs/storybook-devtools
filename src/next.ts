@@ -26,6 +26,7 @@ import {
   type ComponentHighlighterUnpluginHost,
 } from './unplugin'
 import type { ComponentHighlighterOptions } from './create-component-highlighter-plugin'
+import { createRuntimeMcp, type RuntimeMcp, type RuntimeAgentOptions } from './agent-mcp'
 import { createStorybookDevframe, type StorybookDevframeState } from './devframe'
 import { registerStorybookHubSurfaces } from './hub-setup'
 import { ConsoleNotificationService } from './notifications'
@@ -636,6 +637,8 @@ export function withStorybookDevtools(
 // ─── app/__devframes/[[...path]]/route.ts ─────────────────────────────────
 
 export interface CreateStorybookDevtoolsRouteOptions {
+  /** Read-only runtime MCP is enabled by default at <base>storybook-devtools/mcp. Set false to disable. */
+  agent?: RuntimeAgentOptions | false
   /** Gate the hub behind interactive auth. @default true */
   auth?: boolean
   /** Pin the side-car RPC/WS port (Next routes can't accept WS upgrades). */
@@ -674,6 +677,10 @@ export interface CreateStorybookDevtoolsRouteOptions {
 export function createStorybookDevtoolsRoute(
   options: CreateStorybookDevtoolsRouteOptions = {},
 ) {
+  if (process.env['NODE_ENV'] === 'production') {
+    const notFound = async (_req: Request) => new Response('Not found', { status: 404 })
+    return { GET: notFound, POST: notFound, DELETE: notFound }
+  }
   const globalState = getGlobalState()
   const configured = globalState.resolvedOptions ?? resolveNextOptions({})
 
@@ -728,8 +735,8 @@ export function createStorybookDevtoolsRoute(
       ...(options.host != null ? { host: options.host } : {}),
       ...(options.origin != null ? { origin: options.origin } : {}),
       auth: options.auth ?? true,
-      // The aggregate MCP endpoint needs the optional `@devframes/agentic`
-      // peer this package doesn't declare; out of scope for the DevTools panel.
+      // Keep the aggregate hub MCP disabled: the isolated runtime endpoint
+      // exposes only our read-only tools, never terminals or shared state.
       mcp: false,
       // The Terminals dock is a separate devframe; `@vitejs/devtools` mounts
       // it on the Vite host, so the Next hub mounts it too for the same
@@ -749,11 +756,18 @@ export function createStorybookDevtoolsRoute(
     }),
   )
 
-  return {
-    GET: async (req: Request) => (await hubReady).handler(req),
-    POST: async (req: Request) => (await hubReady).handler(req),
-    DELETE: async (req: Request) => (await hubReady).handler(req),
+  let mcp: Promise<RuntimeMcp> | undefined
+  const handler = async (req: Request) => {
+    if (options.agent !== false && new URL(req.url).pathname === `${base}storybook-devtools/mcp`) {
+      const agentOptions = options.agent
+      mcp ??= hubReady
+        .then(hub => hub.ready())
+        .then(async instance => createRuntimeMcp(await instance.context, deps, agentOptions))
+      return (await mcp).fetch(req)
+    }
+    return (await hubReady).handler(req)
   }
+  return { GET: handler, POST: handler, DELETE: handler }
 }
 
 /**
