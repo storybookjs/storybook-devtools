@@ -11,22 +11,61 @@
  * The tag attaches a non-enumerable symbol to the component function. The
  * runtime reads it off the live fiber tree via the React DevTools global hook.
  * The rendered tree is left completely untouched.
+ *
+ * Reading the module takes a parser, and Storybook's changed: Storybook 10
+ * parses with Babel, Storybook 11 with OXC into ESTree nodes, through
+ * `parseModule` in its csf-tools. `transform-babel.ts` and
+ * `transform-estree.ts` read the same facts from either AST; everything
+ * else here works on those facts and on the source text.
  */
 
 import * as path from 'path'
-import type { ESTree as T } from 'storybook/internal/csf-tools'
 import type { TransformFunction, TransformOptions } from '../types'
 import { loadStorybookInternal } from '../../storybook-peer'
+import { babelModuleReader } from './transform-babel'
+import { estreeModuleReader } from './transform-estree'
 
-type CsfTools = typeof import('storybook/internal/csf-tools')
+/** What the transform needs to know about a module. */
+export interface ModuleFacts {
+  /** The module's directive prologue holds `"use client"`. */
+  useClient: boolean
+  /** The module contains JSX. */
+  hasJsx: boolean
+  /** Top-level component declarations, by name. */
+  components: Set<string>
+  /** Every name the module exports, the default export's binding included. */
+  exportedNames: Set<string>
+  /** The binding the module exports as default, if it is a named one. */
+  defaultExportName: string | null
+  /** `file:line:column` of an anonymous default-exported function. */
+  anonymousDefaultLoc: string | null
+  /**
+   * PascalCase bindings assigned from a call that is not memo/forwardRef,
+   * likely an HOC the transform can't tag, with their `file:line:column`.
+   */
+  unsupportedHoc: Map<string, string>
+}
 
-// Storybook's csf-tools, loaded on first use through the guarded peer loader
-// rather than a static import, so a missing or too-old `storybook` fails with
-// the peer requirement instead of a bare module resolution error at host
-// config load.
-let csfTools: CsfTools | undefined
-function tools(): CsfTools {
-  return (csfTools ??= loadStorybookInternal<CsfTools>('csf-tools'))
+/** Parses a module with one Storybook's parser and reads its facts. */
+export interface ModuleReader {
+  read(code: string, id: string): ModuleFacts
+}
+
+let reader: ModuleReader | undefined
+
+/**
+ * The reader for the installed Storybook: ESTree when its csf-tools have
+ * `parseModule`, Babel otherwise. Both readers are imported statically,
+ * since the bundler transform hooks are synchronous, and load nothing
+ * from `storybook` until they are called, so either imports safely on
+ * the other Storybook.
+ */
+function moduleReader(): ModuleReader {
+  return (reader ??=
+    typeof loadStorybookInternal<{ parseModule?: unknown }>('csf-tools').parseModule ===
+    'function'
+      ? estreeModuleReader
+      : babelModuleReader)
 }
 
 function createHash(data: string): string {
@@ -45,66 +84,6 @@ export const VIRTUAL_MODULE_ID = 'virtual:component-highlighter/runtime'
 const TAG_FN = '__chRegisterMeta'
 
 /**
- * Detect a module-level `"use client"` directive (the RSC client-boundary
- * marker). The parser marks the statements of the leading directive prologue
- * with their `directive` text, so we read it from there rather than scanning
- * text — this naturally handles either quote style and ignores `"use client"`
- * strings that appear deeper in the module.
- */
-function hasUseClientDirective(program: T.Program): boolean {
-  for (const statement of program.body) {
-    if (statement.type !== 'ExpressionStatement' || statement.directive == null) {
-      return false
-    }
-    if (statement.directive === 'use client') return true
-  }
-  return false
-}
-
-/** `file:line:column` of an offset into `code`, both 1-based. */
-function locationIn(id: string, code: string, offset: number): string {
-  const before = code.slice(0, offset)
-  const line = before.split('\n').length
-  const column = offset - (before.lastIndexOf('\n') + 1) + 1
-  return `${id}:${line}:${column}`
-}
-
-function isComponentName(name: string | undefined | null): boolean {
-  const first = name?.[0]
-  return !!first && first === first.toUpperCase() && first !== first.toLowerCase()
-}
-
-function isMemoOrForwardRef(node: T.Expression | null | undefined): boolean {
-  if (!node || node.type !== 'CallExpression') return false
-  const callee = node.callee
-  // Bare form: memo(...) / forwardRef(...)
-  if (
-    callee.type === 'Identifier' &&
-    (callee.name === 'memo' || callee.name === 'forwardRef')
-  ) {
-    return true
-  }
-  // Member form: React.memo(...) / React.forwardRef(...)
-  if (
-    callee.type === 'MemberExpression' &&
-    callee.property.type === 'Identifier' &&
-    (callee.property.name === 'memo' || callee.property.name === 'forwardRef')
-  ) {
-    return true
-  }
-  return false
-}
-
-function isComponentInit(node: T.Expression | null | undefined): boolean {
-  if (!node) return false
-  return (
-    node.type === 'ArrowFunctionExpression' ||
-    node.type === 'FunctionExpression' ||
-    isMemoOrForwardRef(node)
-  )
-}
-
-/**
  * Transform React JSX/TSX files: collect exported component bindings and
  * append metadata tags. The component declarations themselves are never
  * modified.
@@ -115,8 +94,7 @@ export const transform: TransformFunction = (
   options: TransformOptions = {},
 ): string | undefined => {
   try {
-    // Offsets index `parsedCode`, which has its line endings normalized.
-    const { program, code: parsedCode } = tools().parseModule(code, id)
+    const facts = moduleReader().read(code, id)
 
     // RSC gate: in `rsc` mode, only client components (modules with a
     // `"use client"` directive) are instrumented. Server components never
@@ -124,95 +102,15 @@ export const transform: TransformFunction = (
     // client runtime into the server module graph. In a plain SPA (rsc off)
     // there is no directive but every component is a client component, so we
     // tag everything — hence this gate is opt-in.
-    if (options.rsc && !hasUseClientDirective(program)) {
+    if (options.rsc && !facts.useClient) {
       return undefined
     }
 
-    let hasJsx = false
-    tools().walk(program, (node) => {
-      if (node.type === 'JSXElement' || node.type === 'JSXFragment') hasJsx = true
-      return !hasJsx
-    })
-
-    // Top-level component declarations by name, the set of names that are
-    // exported (inline, via specifier, or as default), and the default name.
-    const topLevelComponents = new Set<string>()
-    const exportedNames = new Set<string>()
-    let defaultExportName: string | null = null
-
-    // Non-fatal detection gaps to surface as diagnostics.
-    let anonDefaultLoc: string | null = null
-    const unsupportedHoc = new Map<string, string>() // name -> file:line:col
-    const nodeLoc = (node: T.Node): string => locationIn(id, parsedCode, node.start)
-
-    const considerDeclaration = (decl: T.Function | T.Class) => {
-      const name = decl.id?.name
-      if (name && isComponentName(name)) topLevelComponents.add(name)
-    }
-    const considerVariable = (varDecl: T.VariableDeclaration) => {
-      for (const d of varDecl.declarations) {
-        if (d.id.type !== 'Identifier' || !isComponentName(d.id.name)) continue
-        if (isComponentInit(d.init)) {
-          topLevelComponents.add(d.id.name)
-        } else if (
-          d.init &&
-          d.init.type === 'CallExpression' &&
-          !isMemoOrForwardRef(d.init)
-        ) {
-          // PascalCase `X = someCall(...)` that isn't memo/forwardRef — likely
-          // an unrecognized HOC wrapper we can't statically tag.
-          unsupportedHoc.set(d.id.name, nodeLoc(d.init))
-        }
-      }
-    }
-
-    for (const stmt of program.body) {
-      if (stmt.type === 'FunctionDeclaration' || stmt.type === 'ClassDeclaration') {
-        considerDeclaration(stmt)
-      } else if (stmt.type === 'VariableDeclaration') {
-        considerVariable(stmt)
-      } else if (stmt.type === 'ExportNamedDeclaration') {
-        if (
-          stmt.declaration?.type === 'FunctionDeclaration' ||
-          stmt.declaration?.type === 'ClassDeclaration'
-        ) {
-          considerDeclaration(stmt.declaration)
-          if (stmt.declaration.id) exportedNames.add(stmt.declaration.id.name)
-        } else if (stmt.declaration?.type === 'VariableDeclaration') {
-          considerVariable(stmt.declaration)
-          for (const d of stmt.declaration.declarations) {
-            if (d.id.type === 'Identifier') exportedNames.add(d.id.name)
-          }
-        }
-        for (const spec of stmt.specifiers) {
-          if (spec.local.type === 'Identifier') exportedNames.add(spec.local.name)
-        }
-      } else if (stmt.type === 'ExportDefaultDeclaration') {
-        const decl = stmt.declaration
-        if (
-          (decl.type === 'FunctionDeclaration' || decl.type === 'ClassDeclaration') &&
-          decl.id
-        ) {
-          considerDeclaration(decl)
-          defaultExportName = decl.id.name
-        } else if (decl.type === 'Identifier') {
-          defaultExportName = decl.name
-        } else if (
-          decl.type === 'ArrowFunctionExpression' ||
-          decl.type === 'FunctionExpression'
-        ) {
-          // `export default () => …` / `export default function () {}` —
-          // anonymous, no stable binding to tag.
-          anonDefaultLoc = nodeLoc(decl)
-        }
-      }
-    }
-
-    if (defaultExportName) exportedNames.add(defaultExportName)
+    const { hasJsx, exportedNames, defaultExportName } = facts
 
     // name -> isDefaultExport
     const componentBindings = new Map<string, boolean>()
-    for (const name of topLevelComponents) {
+    for (const name of facts.components) {
       if (exportedNames.has(name)) {
         componentBindings.set(name, name === defaultExportName)
       }
@@ -222,17 +120,17 @@ export const transform: TransformFunction = (
     // actually render JSX (component modules), so unrelated PascalCase factory
     // exports in non-component files aren't flagged.
     if (hasJsx && options.onIssue) {
-      if (anonDefaultLoc) {
+      if (facts.anonymousDefaultLoc) {
         options.onIssue({
           code: 'unsupported-pattern',
           file: id,
           name: 'default',
-          loc: anonDefaultLoc,
+          loc: facts.anonymousDefaultLoc,
           detail:
             'Anonymous default export can’t be detected for story generation. Give it a name, e.g. `function Foo() {}; export default Foo`.',
         })
       }
-      for (const [name, loc] of unsupportedHoc) {
+      for (const [name, loc] of facts.unsupportedHoc) {
         if (exportedNames.has(name) && !componentBindings.has(name)) {
           options.onIssue({
             code: 'unsupported-pattern',
