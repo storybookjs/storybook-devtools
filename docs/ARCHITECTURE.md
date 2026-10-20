@@ -69,13 +69,18 @@ messages, and docks.
 `src/frameworks/<fw>/transform.ts` runs at build time. Neither transform
 wraps components.
 
-- **React**: parses the module with `parseModule` from
-  `storybook/internal/csf-tools` (OXC, not a direct dependency) and appends
-  the runtime import plus one idempotent call per exported component,
-  `__chRegisterMeta(Component, { componentName, filePath,
-  relativeFilePath, sourceId, isDefaultExport })`, after the module body.
-  The module's own text and line numbers are untouched, and so is the
-  fiber tree.
+- **React**: parses the module with Storybook's parser (not a direct
+  dependency) and appends the runtime import plus one idempotent call per
+  exported component, `__chRegisterMeta(Component, { componentName,
+  filePath, relativeFilePath, sourceId, isDefaultExport })`, after the
+  module body. The module's own text and line numbers are untouched, and
+  so is the fiber tree. The parser depends on the Storybook: Babel from
+  `storybook/internal/babel` on Storybook 10 (`transform-babel.ts`),
+  `parseModule` from `storybook/internal/csf-tools` on Storybook 11
+  (`transform-estree.ts`). Each reads the same facts from its AST: the
+  `"use client"` directive, whether there is JSX, and the exported
+  component bindings. `transform.ts` picks one the first time it runs, by
+  whether csf-tools have `parseModule`.
 - **Vue**: prepends a runtime import and `registerComponentSource(filePath)`
   call to the `<script setup>`/`<script>` block. Everything else is preserved
   byte-for-byte. The runtime accepts only these source paths, respecting the
@@ -242,20 +247,32 @@ already typed rather than arbitrary runtime values. **File mutation** —
 appending the rendered export to a file that already exists — runs through
 `src/utils/csf-writer.ts`. `loadCsf().parse()` validates the file. The
 export name is deduped against `_storyExports` and every other top-level
-name the file declares or exports. The needed imports are merged with the
-csf-tools import helpers: `setImportSpecifiers` extends a matching
-`ImportDeclaration`, `insertAfterImports` adds a new one, and
-`removeStatement` drops an emptied one. The story is appended after
-everything else in the file, a blank line apart. These edits run in their
-own `SourceEditor` of the file, so their intermediate commits only parse the
-file again and do not index it as CSF.
-Import merging matches exported symbols, reuses aliases, promotes type-only
-bindings when a value is needed, and allocates free names for collisions.
-Only references in the appended snippet are rewritten: the snippet is parsed
-on its own in a `SourceEditor`, and its scope analysis finds the references
-to rename, skipping names a local shadows. Edits are text edits, so
-comments, quote style and formatting elsewhere in the file survive
-byte-identically.
+name the file declares or exports. Import merging matches exported symbols,
+reuses aliases, promotes type-only bindings when a value is needed, and
+allocates free names for collisions. Only references in the appended
+snippet are rewritten, skipping names a local shadows.
+
+Those rules are written once, in `csf-writer.ts`. The reads and edits of
+the file's syntax go through a `StoryFileEditor`, with one implementation
+per Storybook, picked by whether csf-tools have `parseModule` and imported
+lazily:
+
+- `csf-writer-babel.ts` (Storybook 10) edits `csf._ast`, parses the
+  snippet with `babelParse`, renames with Babel's `traverse`, and prints
+  the file with `printCsf`. Recast reuses each untouched node's original
+  source, so comments, quote style and formatting elsewhere in the file
+  survive.
+- `csf-writer-estree.ts` (Storybook 11) makes text edits in a
+  `SourceEditor` of the file with the csf-tools import helpers:
+  `setImportSpecifiers` extends a matching `ImportDeclaration`,
+  `insertAfterImports` adds a new one, and `removeStatement` drops an
+  emptied one. Its intermediate commits only parse the file again and do
+  not index it as CSF. The snippet is parsed in its own `SourceEditor`,
+  whose scope analysis finds the references to rename. The story goes
+  after everything else in the file, a blank line apart.
+
+The two differ in one visible way: recast puts a blank line before an
+added import, the text edits do not.
 
 Generators are `async` because `storybook/internal/csf-tools` is imported
 lazily — same `webpackIgnore` reasoning as `src/story-index.ts`.
@@ -285,7 +302,7 @@ extension (always `./`- or `../`-prefixed, unlike Storybook's own, which
 yields a bare `.storybook/preview` for a story next to the config dir). It
 must end in `/preview`, which `CsfFile` requires to accept
 `preview.meta(...)`. An *append* ignores the project's preview and follows
-the file (`detectExportStyle` in `csf-writer.ts`): `CsfFile._metaIsFactory`
+the file (`csf3Style` of the `StoryFileEditor`): `CsfFile._metaIsFactory`
 / `_metaVariableName` give `<metaVar>.story({…})`; a CSF3 file reuses its
 first story's `: Type` annotation or `satisfies` clause, else the `Story`
 alias if the file declares one, else no annotation. Mixing formats makes
@@ -294,8 +311,10 @@ factory file (`const x = preview.meta(`) and never emits CSF3 into it.
 
 **Line endings.** The writer detects the existing file's line ending (CRLF
 when most breaks are CRLF, else LF) and normalises the result to it.
-csf-tools' `SourceEditor` ends every line like the file's first one, which
-differs for a file with mixed endings.
+Neither editor keeps it on its own: `printCsf` defaults to `os.EOL` on
+Storybook 10, so the Babel editor passes the ending as `lineTerminator`,
+and csf-tools' `SourceEditor` ends every line like the file's first one,
+which differs for a file with mixed endings.
 
 **Fallback rule.** `writeStoryIntoCsf` returns `{ code, exportName,
 fallbackReason? }`. When `loadCsf` throws — a story file with
@@ -423,7 +442,11 @@ module. `src/story-index.ts`, `src/storybook-project.ts`,
 `src/storybook-launch.ts` and `src/utils/csf-writer.ts` mark every such
 import with a `/* webpackIgnore: true */` magic comment — inert on
 Vite/Rollup, which don't recognize it — so webpack leaves them as real
-runtime `import()`s instead of bundling them.
+runtime `import()`s instead of bundling them. `csf-writer-babel.ts` loads
+`storybook/internal/babel` the same way, and for a second reason: the AST it
+assembles is printed by csf-tools' recast, which only reprints nodes it
+recognises as unchanged, so a Babel copy bundled by webpack mixed with the
+natively loaded csf-tools makes every append fall back to the text splice.
 
 **Peer dependency loading.** `storybook` is a required peer. Node-side
 code reaches `storybook/internal/*` through `src/storybook-peer.ts`
@@ -573,7 +596,8 @@ their hub, so this plugin's installation is the only one there.
 | `src/panel/panel.ts` | DevTools panel tabs |
 | `src/utils/story-matching.ts` | Story-to-component matching against Storybook's `index.json`, visit-target selection, and docs-entry matching (`findDocsEntry`) |
 | `src/utils/instance-selection.ts` | Props fingerprinting and picking one live instance per variant for story creation, preferring an instance with live edits || `src/utils/story-generator.ts` | Shared story generation utilities (naming, args formatting) |
-| `src/utils/csf-writer.ts` | CSF-AST append/dedupe/import-merge for existing story files in the file's own format (CSF3 or factory) and line endings, with a regex-splice fallback, plus prettier formatting |
+| `src/utils/csf-writer.ts` | Append/dedupe/import-merge for existing story files in the file's own format (CSF3 or factory) and line endings, with a regex-splice fallback, plus prettier formatting |
+| `src/utils/csf-writer-babel.ts`, `src/utils/csf-writer-estree.ts` | The writer's syntax reads and edits on Storybook 10 (Babel) and 11 (ESTree) |
 | `src/utils/csf-format.ts` | Whether the project's preview is a CSF factory preview, and the preview import specifier for new factory story files |
 | `src/utils/normalize-runtime-imports.ts` | Normalizes runtime import specifiers across hosts |
 | `src/utils/storybook-docs-url.ts` | Resolves the Storybook docs URL for the "Open Docs" command |
@@ -699,8 +723,9 @@ function, the server broadcasts, a client-registered handler acts on the DOM.
    transform tags only modules with a leading `"use client"` directive,
    leaving server-component modules untouched so the client runtime never
    enters the server graph. Owned by
-   `src/frameworks/react/transform.ts` (`hasUseClientDirective`), covered by
-   the "RSC mode" unit tests.
+   `src/frameworks/react/transform.ts` (the gate) and the
+   `hasUseClientDirective` of `transform-babel.ts` and `transform-estree.ts`,
+   covered by the "RSC mode" unit tests.
 
 9. **Hook script loads before module scripts.** The inline DevTools hook
    must be injected into `<head>` before any module script, so it exists
