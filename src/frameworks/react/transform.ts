@@ -13,7 +13,6 @@
  * The rendered tree is left completely untouched.
  */
 
-// @ts-nocheck
 import * as path from 'path'
 import type { ESTree as T } from 'storybook/internal/csf-tools'
 import type { TransformFunction, TransformOptions } from '../types'
@@ -21,10 +20,10 @@ import { loadStorybookInternal } from '../../storybook-peer'
 
 type CsfTools = typeof import('storybook/internal/csf-tools')
 
-// Storybook's csf-tools, which parses with OXC, loaded on first use through
-// the guarded peer loader rather than a static import, so a missing or
-// too-old `storybook` fails with the peer requirement instead of a bare
-// module resolution error at host config load.
+// Storybook's csf-tools, loaded on first use through the guarded peer loader
+// rather than a static import, so a missing or too-old `storybook` fails with
+// the peer requirement instead of a bare module resolution error at host
+// config load.
 let csfTools: CsfTools | undefined
 function tools(): CsfTools {
   return (csfTools ??= loadStorybookInternal<CsfTools>('csf-tools'))
@@ -71,11 +70,8 @@ function locationIn(id: string, code: string, offset: number): string {
 }
 
 function isComponentName(name: string | undefined | null): boolean {
-  return (
-    !!name &&
-    name[0] === name[0].toUpperCase() &&
-    name[0] !== name[0].toLowerCase()
-  )
+  const first = name?.[0]
+  return !!first && first === first.toUpperCase() && first !== first.toLowerCase()
 }
 
 function isMemoOrForwardRef(node: T.Expression | null | undefined): boolean {
@@ -134,11 +130,8 @@ export const transform: TransformFunction = (
 
     let hasJsx = false
     tools().walk(program, (node) => {
-      if (hasJsx) return false
-      if (node.type === 'JSXElement' || node.type === 'JSXFragment') {
-        hasJsx = true
-        return false
-      }
+      if (node.type === 'JSXElement' || node.type === 'JSXFragment') hasJsx = true
+      return !hasJsx
     })
 
     // Top-level component declarations by name, the set of names that are
@@ -150,10 +143,9 @@ export const transform: TransformFunction = (
     // Non-fatal detection gaps to surface as diagnostics.
     let anonDefaultLoc: string | null = null
     const unsupportedHoc = new Map<string, string>() // name -> file:line:col
-    const nodeLoc = (node: T.Node | null | undefined): string =>
-      node ? locationIn(id, parsedCode, node.start) : id
+    const nodeLoc = (node: T.Node): string => locationIn(id, parsedCode, node.start)
 
-    const considerFunction = (decl: T.FunctionDeclaration) => {
+    const considerDeclaration = (decl: T.Function | T.Class) => {
       const name = decl.id?.name
       if (name && isComponentName(name)) topLevelComponents.add(name)
     }
@@ -173,24 +165,18 @@ export const transform: TransformFunction = (
         }
       }
     }
-    const considerClass = (decl: T.ClassDeclaration) => {
-      const name = decl.id?.name
-      if (name && isComponentName(name)) topLevelComponents.add(name)
-    }
 
     for (const stmt of program.body) {
-      if (stmt.type === 'FunctionDeclaration') {
-        considerFunction(stmt)
+      if (stmt.type === 'FunctionDeclaration' || stmt.type === 'ClassDeclaration') {
+        considerDeclaration(stmt)
       } else if (stmt.type === 'VariableDeclaration') {
         considerVariable(stmt)
-      } else if (stmt.type === 'ClassDeclaration') {
-        considerClass(stmt)
       } else if (stmt.type === 'ExportNamedDeclaration') {
-        if (stmt.declaration?.type === 'FunctionDeclaration') {
-          considerFunction(stmt.declaration)
-          if (stmt.declaration.id) exportedNames.add(stmt.declaration.id.name)
-        } else if (stmt.declaration?.type === 'ClassDeclaration') {
-          considerClass(stmt.declaration)
+        if (
+          stmt.declaration?.type === 'FunctionDeclaration' ||
+          stmt.declaration?.type === 'ClassDeclaration'
+        ) {
+          considerDeclaration(stmt.declaration)
           if (stmt.declaration.id) exportedNames.add(stmt.declaration.id.name)
         } else if (stmt.declaration?.type === 'VariableDeclaration') {
           considerVariable(stmt.declaration)
@@ -198,18 +184,16 @@ export const transform: TransformFunction = (
             if (d.id.type === 'Identifier') exportedNames.add(d.id.name)
           }
         }
-        for (const spec of stmt.specifiers ?? []) {
-          if (spec.type === 'ExportSpecifier' && spec.local) {
-            exportedNames.add(spec.local.name)
-          }
+        for (const spec of stmt.specifiers) {
+          if (spec.local.type === 'Identifier') exportedNames.add(spec.local.name)
         }
       } else if (stmt.type === 'ExportDefaultDeclaration') {
         const decl = stmt.declaration
-        if (decl.type === 'FunctionDeclaration' && decl.id) {
-          considerFunction(decl)
-          defaultExportName = decl.id.name
-        } else if (decl.type === 'ClassDeclaration' && decl.id) {
-          considerClass(decl)
+        if (
+          (decl.type === 'FunctionDeclaration' || decl.type === 'ClassDeclaration') &&
+          decl.id
+        ) {
+          considerDeclaration(decl)
           defaultExportName = decl.id.name
         } else if (decl.type === 'Identifier') {
           defaultExportName = decl.name
@@ -221,7 +205,6 @@ export const transform: TransformFunction = (
           // anonymous, no stable binding to tag.
           anonDefaultLoc = nodeLoc(decl)
         }
-        // Anonymous default expressions are skipped: no stable binding to tag.
       }
     }
 
