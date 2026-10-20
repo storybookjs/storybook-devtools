@@ -41,3 +41,15 @@ export function describeFor(
   if (generation === csfToolsGeneration) describe(name, fn)
   else describe.skip(`${name} (needs ${needs[generation]})`, fn)
 }
+
+/**
+ * The one difference between the two story writers' output: recast, on the
+ * Babel path, puts a blank line before an import it adds below the others.
+ * Returns `code` without that blank line, and whether it was there, so a
+ * test can keep one snapshot for both paths and check the blank line
+ * against the installed path.
+ */
+export function withoutAddedImportGap(code: string): { code: string; gap: boolean } {
+  const gap = /^(import .*\n)\n(?=import )/m
+  return { code: code.replace(gap, '$1'), gap: gap.test(code) }
+}

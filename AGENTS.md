@@ -203,9 +203,10 @@ live in `src/**/*-babel.ts` and
 path skip themselves on the other (`src/test-utils/csf-tools.ts`). To check
 the ESTree path before the dev dependency is a Storybook 11 with
 `parseModule`, install such a Storybook locally, run both, and restore
-`package.json` and `pnpm-lock.yaml`. Five story-generator snapshots keep one
-version per path; `vitest -u` on one path deletes the other path's five as
-obsolete, so restore those after updating snapshots.
+`package.json` and `pnpm-lock.yaml`. The two writers differ only in a blank
+line recast adds before a new import; story-generator tests strip it with
+`withoutAddedImportGap` and check it against the installed path, so both
+paths share one snapshot each.
 
 For Storybook peer, indexing, generation, or launcher changes, also run:
 

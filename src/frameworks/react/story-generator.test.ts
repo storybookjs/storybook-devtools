@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { csfToolsGeneration } from '../../test-utils/csf-tools'
+import { csfToolsGeneration, withoutAddedImportGap } from '../../test-utils/csf-tools'
 import { generateStory } from './story-generator'
 
 const meta = {
@@ -134,7 +134,9 @@ export const Default2: Story = {};
       existingContent: csf3,
     })
 
-    expect(result.content).toMatchSnapshot(csfToolsGeneration)
+    const { code, gap } = withoutAddedImportGap(result.content)
+    expect(gap).toBe(csfToolsGeneration === 'babel')
+    expect(code).toMatchSnapshot()
   })
 
   it('merges fn into an existing storybook/test import', async () => {
@@ -188,7 +190,9 @@ export const Default2: Story = {};
       existingContent: csf3,
     })
 
-    expect(result.content).toMatchSnapshot(csfToolsGeneration)
+    const { code, gap } = withoutAddedImportGap(result.content)
+    expect(gap).toBe(csfToolsGeneration === 'babel')
+    expect(code).toMatchSnapshot()
   })
 
   it('preserves leading comments, blank lines, single quotes and trailing commas', async () => {
@@ -243,7 +247,9 @@ export const Default: Story = {};
       existingContent,
     })
 
-    expect(result.content).toMatchSnapshot(csfToolsGeneration)
+    const { code, gap } = withoutAddedImportGap(result.content)
+    expect(gap).toBe(csfToolsGeneration === 'babel')
+    expect(code).toMatchSnapshot()
   })
 
   it('appends to a file containing a CSF2 story', async () => {
