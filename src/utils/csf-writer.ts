@@ -16,8 +16,9 @@
  *
  * `loadCsf().parse()` validates the file and tells a factory file from a
  * CSF3 one on every supported Storybook. Reading and editing the file's
- * syntax differs: Storybook 10 hands out Babel nodes and prints with
- * recast, Storybook 11 hands out ESTree nodes and edits text. Those steps
+ * syntax differs: Storybook 10 (and 11 prereleases without
+ * storybookjs/storybook#36613) hands out Babel nodes and prints with
+ * recast; with #36613 csf-tools hand out ESTree nodes and edit text. Those steps
  * sit behind `StoryFileEditor`, implemented by `csf-writer-babel.ts` and
  * `csf-writer-estree.ts`; the rules for names and imports are written once
  * here. A file `CsfFile` rejects falls back to a regex splice.
@@ -135,17 +136,23 @@ let syntax: Promise<CsfWriterSyntax> | undefined
 /**
  * The editor for the installed Storybook: ESTree when its csf-tools have
  * `parseModule`, Babel otherwise. Each is imported only on the Storybook
- * it is written for: on Storybook 11 `storybook/internal/babel` does not
- * resolve, and Storybook 10 lacks the ESTree csf-tools API.
+ * it is written for: with storybookjs/storybook#36613
+ * `storybook/internal/babel` does not resolve, and without it the ESTree
+ * csf-tools API is missing. A failed load is not kept, so the next write
+ * tries again.
  */
 function csfWriterSyntax(): Promise<CsfWriterSyntax> {
-  return (syntax ??= (async () => {
+  syntax ??= (async () => {
     const csfTools = await import(/* webpackIgnore: true */ 'storybook/internal/csf-tools')
     const editor = typeof (csfTools as { parseModule?: unknown }).parseModule === 'function'
       ? await import('./csf-writer-estree')
       : await import('./csf-writer-babel')
     return editor.loadCsfWriterSyntax()
-  })())
+  })()
+  syntax.catch(() => {
+    syntax = undefined
+  })
+  return syntax
 }
 
 /**

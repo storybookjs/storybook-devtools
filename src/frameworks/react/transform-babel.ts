@@ -1,11 +1,11 @@
 /**
  * Reads a React module's facts (`ModuleFacts` in `transform.ts`) with the
- * Babel parser of Storybook 10. Storybook 11 removes
- * `storybook/internal/babel`; `transform-estree.ts` reads the same facts
- * there. This file can go when the plugin drops Storybook 10.
+ * Babel parser of Storybook 10 (and of 11 prereleases without
+ * storybookjs/storybook#36613). #36613 removes `storybook/internal/babel`;
+ * `transform-estree.ts` reads the same facts there. This file can go when
+ * the plugin drops Storybook 10.
  */
 
-// @ts-nocheck
 import type { types as T } from 'storybook/internal/babel'
 import type { ModuleFacts, ModuleReader } from './transform'
 import { loadStorybookInternal } from '../../storybook-peer'
@@ -20,11 +20,6 @@ let babelModule: BabelModule | undefined
 function babel(): BabelModule {
   return (babelModule ??= loadStorybookInternal<BabelModule>('babel'))
 }
-const traverse: BabelModule['traverse'] = ((...args) =>
-  babel().traverse(...args)) as BabelModule['traverse']
-
-const parse: BabelModule['parser']['parse'] = (...args) =>
-  babel().parser.parse(...args)
 
 /**
  * Detect a module-level `"use client"` directive (the RSC client-boundary
@@ -40,11 +35,8 @@ function hasUseClientDirective(ast: T.File): boolean {
 }
 
 function isComponentName(name: string | undefined | null): boolean {
-  return (
-    !!name &&
-    name[0] === name[0].toUpperCase() &&
-    name[0] !== name[0].toLowerCase()
-  )
+  const first = name?.[0]
+  return !!first && first === first.toUpperCase() && first !== first.toLowerCase()
 }
 
 function isMemoOrForwardRef(node: T.Expression | null | undefined): boolean {
@@ -78,7 +70,8 @@ function isComponentInit(node: T.Expression | null | undefined): boolean {
 }
 
 function read(code: string, id: string): ModuleFacts {
-  const ast = parse(code, {
+  const { parser, traverse } = babel()
+  const ast = parser.parse(code, {
     sourceType: 'module',
     plugins: [
       'typescript',
