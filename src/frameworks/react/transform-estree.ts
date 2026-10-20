@@ -1,8 +1,8 @@
 /**
  * Reads a React module's facts (`ModuleFacts` in `transform.ts`) with
- * `parseModule` and `walk` from the csf-tools of Storybook 11, which parse
- * with OXC into ESTree nodes. `transform-babel.ts` reads the same facts on
- * Storybook 10.
+ * `parseModule` and `walk` from the csf-tools of
+ * storybookjs/storybook#36613 (Storybook 11), which parse with OXC into
+ * ESTree nodes. `transform-babel.ts` reads the same facts with Babel.
  */
 
 import type { ESTree as T } from 'storybook/internal/csf-tools'

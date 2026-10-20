@@ -13,8 +13,9 @@
  * The rendered tree is left completely untouched.
  *
  * Reading the module takes a parser, and Storybook's changed: Storybook 10
- * parses with Babel, Storybook 11 with OXC into ESTree nodes, through
- * `parseModule` in its csf-tools. `transform-babel.ts` and
+ * parses with Babel; with storybookjs/storybook#36613 (Storybook 11) it
+ * parses with OXC into ESTree nodes, through `parseModule` in its
+ * csf-tools. `transform-babel.ts` and
  * `transform-estree.ts` read the same facts from either AST; everything
  * else here works on those facts and on the source text.
  */

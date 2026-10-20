@@ -2,8 +2,9 @@ import { describe } from 'vitest'
 
 /**
  * The csf-tools generation of the installed Storybook, picked the way the
- * plugin picks it: ESTree when csf-tools have `parseModule` (Storybook 11),
- * Babel otherwise (Storybook 10).
+ * plugin picks it: ESTree when csf-tools have `parseModule`
+ * (storybookjs/storybook#36613), Babel otherwise (Storybook 10, and 11
+ * prereleases without #36613).
  */
 const csfTools = (await import('storybook/internal/csf-tools')) as {
   parseModule?: (code: string, fileName?: string) => unknown
@@ -24,8 +25,8 @@ export function parseWithStorybook(code: string, fileName: string): void {
 }
 
 const needs = {
-  babel: 'the Babel csf-tools of Storybook 10',
-  estree: 'the ESTree csf-tools of Storybook 11',
+  babel: 'the Babel csf-tools: Storybook 10, or 11 without #36613',
+  estree: 'the ESTree csf-tools of storybookjs/storybook#36613',
 }
 
 /**

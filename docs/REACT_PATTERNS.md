@@ -4,7 +4,7 @@ What the component detector recognizes, why, and the documented limits.
 
 Detection is non-intrusive: the transform parses each module with
 Storybook's parser (Babel on Storybook 10, `parseModule` from
-`storybook/internal/csf-tools` on 11) and tags exported component **bindings**
+`storybook/internal/csf-tools` with storybookjs/storybook#36613) and tags exported component **bindings**
 with a metadata symbol (`__chRegisterMeta`), and the runtime reads that symbol
 off the live React fiber tree. So a pattern is "supported" iff the transform
 can find a **stable, exported, statically-named binding** to tag.

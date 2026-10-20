@@ -75,9 +75,9 @@ wraps components.
   filePath, relativeFilePath, sourceId, isDefaultExport })`, after the
   module body. The module's own text and line numbers are untouched, and
   so is the fiber tree. The parser depends on the Storybook: Babel from
-  `storybook/internal/babel` on Storybook 10 (`transform-babel.ts`),
-  `parseModule` from `storybook/internal/csf-tools` on Storybook 11
-  (`transform-estree.ts`). Each reads the same facts from its AST: the
+  `storybook/internal/babel` on Storybook 10 and on 11 prereleases without
+  storybookjs/storybook#36613 (`transform-babel.ts`), `parseModule` from
+  `storybook/internal/csf-tools` with #36613 (`transform-estree.ts`). Each reads the same facts from its AST: the
   `"use client"` directive, whether there is JSX, and the exported
   component bindings. `transform.ts` picks one the first time it runs, by
   whether csf-tools have `parseModule`.
@@ -257,12 +257,12 @@ the file's syntax go through a `StoryFileEditor`, with one implementation
 per Storybook, picked by whether csf-tools have `parseModule` and imported
 lazily:
 
-- `csf-writer-babel.ts` (Storybook 10) edits `csf._ast`, parses the
+- `csf-writer-babel.ts` (Babel csf-tools) edits `csf._ast`, parses the
   snippet with `babelParse`, renames with Babel's `traverse`, and prints
   the file with `printCsf`. Recast reuses each untouched node's original
   source, so comments, quote style and formatting elsewhere in the file
   survive.
-- `csf-writer-estree.ts` (Storybook 11) makes text edits in a
+- `csf-writer-estree.ts` (ESTree csf-tools, #36613) makes text edits in a
   `SourceEditor` of the file with the csf-tools import helpers:
   `setImportSpecifiers` extends a matching `ImportDeclaration`,
   `insertAfterImports` adds a new one, and `removeStatement` drops an
@@ -597,7 +597,7 @@ their hub, so this plugin's installation is the only one there.
 | `src/utils/story-matching.ts` | Story-to-component matching against Storybook's `index.json`, visit-target selection, and docs-entry matching (`findDocsEntry`) |
 | `src/utils/instance-selection.ts` | Props fingerprinting and picking one live instance per variant for story creation, preferring an instance with live edits || `src/utils/story-generator.ts` | Shared story generation utilities (naming, args formatting) |
 | `src/utils/csf-writer.ts` | Append/dedupe/import-merge for existing story files in the file's own format (CSF3 or factory) and line endings, with a regex-splice fallback, plus prettier formatting |
-| `src/utils/csf-writer-babel.ts`, `src/utils/csf-writer-estree.ts` | The writer's syntax reads and edits on Storybook 10 (Babel) and 11 (ESTree) |
+| `src/utils/csf-writer-babel.ts`, `src/utils/csf-writer-estree.ts` | The writer's syntax reads and edits with the Babel and the ESTree csf-tools |
 | `src/utils/csf-format.ts` | Whether the project's preview is a CSF factory preview, and the preview import specifier for new factory story files |
 | `src/utils/normalize-runtime-imports.ts` | Normalizes runtime import specifiers across hosts |
 | `src/utils/storybook-docs-url.ts` | Resolves the Storybook docs URL for the "Open Docs" command |

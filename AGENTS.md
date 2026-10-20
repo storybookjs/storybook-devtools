@@ -193,8 +193,9 @@ Build before tests: runtime-helper tests and Next/Rsbuild load `dist`.
 Do not build concurrently with tests; the build clears that directory.
 
 The React transform and the story writer read syntax through Storybook,
-which parses with Babel on Storybook 10 and into ESTree nodes on
-Storybook 11. Those reads live in `src/**/*-babel.ts` and
+which parses with Babel on Storybook 10 (and 11 prereleases without
+storybookjs/storybook#36613) and into ESTree nodes with #36613. Those reads
+live in `src/**/*-babel.ts` and
 `src/**/*-estree.ts`, picked at runtime by whether
 `storybook/internal/csf-tools` has `parseModule`. `pnpm test` and
 `pnpm typecheck` cover the path of the installed `storybook`;
@@ -202,7 +203,9 @@ Storybook 11. Those reads live in `src/**/*-babel.ts` and
 path skip themselves on the other (`src/test-utils/csf-tools.ts`). To check
 the ESTree path before the dev dependency is a Storybook 11 with
 `parseModule`, install such a Storybook locally, run both, and restore
-`package.json` and `pnpm-lock.yaml`.
+`package.json` and `pnpm-lock.yaml`. Five story-generator snapshots keep one
+version per path; `vitest -u` on one path deletes the other path's five as
+obsolete, so restore those after updating snapshots.
 
 For Storybook peer, indexing, generation, or launcher changes, also run:
 

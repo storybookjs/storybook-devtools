@@ -1,9 +1,9 @@
 import { expect, it, vi } from 'vitest'
 import { describeFor } from '../test-utils/csf-tools'
 
-// Recast's default line terminator is `os.EOL` (CRLF on Windows) on
-// Storybook 10. Forcing CRLF as the printer's default reproduces that on
-// any host. Storybook 11 edits text and has no such default.
+// Recast's default line terminator is `os.EOL` (CRLF on Windows) in the
+// Babel csf-tools. Forcing CRLF as the printer's default reproduces that on
+// any host. The ESTree csf-tools edit text and have no such default.
 vi.mock('storybook/internal/csf-tools', async (importOriginal) => {
   const actual = await importOriginal<typeof import('storybook/internal/csf-tools')>()
   return {

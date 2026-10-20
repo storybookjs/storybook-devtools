@@ -1,8 +1,9 @@
 /**
- * `StoryFileEditor` for Storybook 10: edits the Babel AST of `csf._ast` and
- * prints it with `printCsf`, which reprints through recast. Storybook 11
- * removes `storybook/internal/babel`; `csf-writer-estree.ts` does the same
- * there. This file can go when the plugin drops Storybook 10.
+ * `StoryFileEditor` for the Babel csf-tools of Storybook 10 (and of 11
+ * prereleases without storybookjs/storybook#36613): edits the Babel AST of
+ * `csf._ast` and prints it with `printCsf`, which reprints through recast.
+ * #36613 removes `storybook/internal/babel`; `csf-writer-estree.ts` does
+ * the same there. This file can go when the plugin drops Storybook 10.
  *
  * `storybook/internal/csf-tools` and `storybook/internal/babel` are both
  * imported lazily so neither lands in Next's server webpack bundle — see

@@ -1,6 +1,7 @@
 /**
- * `StoryFileEditor` for Storybook 11, whose csf-tools hand out ESTree nodes
- * and edit text. `csf-writer-babel.ts` does the same on Storybook 10.
+ * `StoryFileEditor` for the csf-tools of storybookjs/storybook#36613
+ * (Storybook 11), which hand out ESTree nodes and edit text.
+ * `csf-writer-babel.ts` does the same with the Babel csf-tools.
  *
  * `CsfFile` supplies the file's stories and type annotations. The edits are
  * text edits in a `SourceEditor` of the same source, so code the writer
