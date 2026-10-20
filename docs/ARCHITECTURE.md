@@ -240,15 +240,15 @@ stays hand-rolled in `src/utils/story-generator.ts` (`generateArgsContent`,
 no equivalent, since its own `save-story` flow re-serialises args that were
 already typed rather than arbitrary runtime values. **File mutation** —
 appending the rendered export to a file that already exists — runs through
-`src/utils/csf-writer.ts` through the `CsfFile` editor:
-`loadCsf().parse()`, dedupe the export name against `_storyExports` plus
-every other top-level binding of `csf._program`, merge the needed imports
-with the csf-tools import helpers (`setImportSpecifiers` extends a matching
-`ImportDeclaration` where there is one, `insertAfterImports` adds a new one,
-`removeStatement` drops an emptied one), append the story after everything
-else in the file, a blank line apart, and print. These edits run in their own
-`SourceEditor` of the file, so their intermediate commits only parse the file
-again and do not index it as CSF.
+`src/utils/csf-writer.ts`. `loadCsf().parse()` validates the file. The
+export name is deduped against `_storyExports` and every other top-level
+name the file declares or exports. The needed imports are merged with the
+csf-tools import helpers: `setImportSpecifiers` extends a matching
+`ImportDeclaration`, `insertAfterImports` adds a new one, and
+`removeStatement` drops an emptied one. The story is appended after
+everything else in the file, a blank line apart. These edits run in their
+own `SourceEditor` of the file, so their intermediate commits only parse the
+file again and do not index it as CSF.
 Import merging matches exported symbols, reuses aliases, promotes type-only
 bindings when a value is needed, and allocates free names for collisions.
 Only references in the appended snippet are rewritten: the snippet is parsed

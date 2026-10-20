@@ -237,6 +237,16 @@ export const Primary = { args: { label: 'Hello' } };
     expect(result.code.match(/storybook\/test/g)).toHaveLength(1)
   })
 
+  it('quotes an added import like the rest of the file', async () => {
+    const result = await writeStoryIntoCsf({
+      ...base,
+      existingCode: csf3.replaceAll("'", '"'),
+      requiredImports: [{ source: 'storybook/test', specifiers: ['fn'] }],
+    })
+    expect(result.fallbackReason).toBeUndefined()
+    expect(result.code).toContain('import { fn } from "storybook/test";')
+  })
+
   it('appends after a trailing comment and to a file without a final newline', async () => {
     const result = await writeStoryIntoCsf({
       ...base,

@@ -1,8 +1,7 @@
 /**
  * File-level mutation for generated stories: dedupes the export name against
  * what a story file already declares, merges the imports the new story needs,
- * and appends the story — through the csf-tools source editor of
- * `storybook/internal/csf-tools` rather than by splicing strings.
+ * and appends the story.
  *
  * The appended export follows the *file's* format, whatever the project's
  * preview says: `export const X = <meta>.story({...})` in a CSF factory
@@ -15,15 +14,16 @@
  * `story-generator.ts`: csf-tools has no equivalent, its `save-story` flow
  * serialises already-typed args rather than arbitrary runtime values.
  *
- * `CsfFile` validates the file and supplies its stories, meta and export
- * style; the edits are text edits in a `SourceEditor` of the same source, so
- * code the writer does not touch stays as written (line endings aside: a
- * file with mixed endings comes back with its majority ending).
+ * `CsfFile` from `storybook/internal/csf-tools` validates the file and
+ * supplies its stories, meta and export style. The edits are text edits in a
+ * `SourceEditor` of the same source, so code the writer does not touch stays
+ * as written; only a file with mixed line endings comes back with its
+ * majority ending. A file `CsfFile` rejects falls back to a regex splice.
  * `storybook/internal/csf-tools` is imported lazily so it does not land in
  * Next's server webpack bundle — see `src/story-index.ts` for the
  * `webpackIgnore` reasoning.
  */
-import type { CsfFile, ESTree, ESTreeNode, SourceEditor } from 'storybook/internal/csf-tools'
+import type { Binding, CsfFile, ESTree, SourceEditor } from 'storybook/internal/csf-tools'
 import { escapeRegex, renderStoryExport, type ExportStyle } from './story-generator'
 
 type CsfTools = typeof import('storybook/internal/csf-tools')
@@ -79,15 +79,6 @@ function normalizeLineEndings(code: string, lineEnding: '\r\n' | '\n'): string {
   return code.replace(/\r?\n/g, lineEnding)
 }
 
-/** The quote character for the source of an import the writer adds. */
-function detectQuote(code: string): "'" | '"' {
-  const single = (code.match(/from '[^']*'/g) ?? []).length
-  const double = (code.match(/from "[^"]*"/g) ?? []).length
-  return double > single ? '"' : "'"
-}
-
-type ImportSpecifier = ESTree.ImportDeclaration['specifiers'][number]
-
 /**
  * The export style of a parsed CSF file: factory when `CsfFile` recognised a
  * `preview.meta(...)` call, otherwise CSF3 typed like its existing stories —
@@ -98,16 +89,13 @@ function detectExportStyle(csf: CsfFile): ExportStyle {
   if (csf._metaIsFactory) {
     return { kind: 'factory', metaName: csf._metaVariableName ?? 'meta' }
   }
-  const sourceOf = (node: ESTreeNode): string => csf._editor.source(node)
   for (const story of Object.values(csf._storyExports)) {
     if (story.type !== 'VariableDeclarator') continue
-    const annotation = story.id.type === 'Identifier' && story.id.typeAnnotation
-      ? sourceOf(story.id.typeAnnotation.typeAnnotation)
-      : undefined
-    if (annotation) return { kind: 'csf3', annotation }
+    if (story.id.type === 'Identifier' && story.id.typeAnnotation) {
+      return { kind: 'csf3', annotation: csf._editor.source(story.id.typeAnnotation.typeAnnotation) }
+    }
     if (story.init?.type === 'TSSatisfiesExpression') {
-      const satisfies = sourceOf(story.init.typeAnnotation)
-      if (satisfies) return { kind: 'csf3', satisfies }
+      return { kind: 'csf3', satisfies: csf._editor.source(story.init.typeAnnotation) }
     }
   }
   const declaresStoryType = csf._program.body.some(statement => {
@@ -125,60 +113,27 @@ function uniqueExportName(taken: Set<string>, desired: string): string {
   return `${desired}${counter}`
 }
 
-/** Every name a binding pattern declares, e.g. `a` and `b` in `{ a, b: [b] }`. */
-function addPatternNames(names: Set<string>, node: ESTreeNode | null | undefined): void {
-  if (!node) return
-  switch (node.type) {
-    case 'Identifier':
-      names.add(node.name)
-      break
-    case 'ObjectPattern':
-      for (const property of node.properties) {
-        addPatternNames(names, property.type === 'RestElement' ? property.argument : property.value)
-      }
-      break
-    case 'ArrayPattern':
-      for (const element of node.elements) addPatternNames(names, element)
-      break
-    case 'AssignmentPattern':
-      addPatternNames(names, node.left)
-      break
-    case 'RestElement':
-      addPatternNames(names, node.argument)
-      break
-  }
-}
-
-/** Every top-level binding a file already declares, imports included. */
-function collectTopLevelBindings(program: ESTree.Program): Set<string> {
-  const names = new Set<string>()
-
-  for (const statement of program.body) {
-    const declaration = statement.type === 'ExportNamedDeclaration'
-      ? statement.declaration
-      : statement
-
-    if (declaration?.type === 'VariableDeclaration') {
-      for (const declarator of declaration.declarations) addPatternNames(names, declarator.id)
-    } else if (
-      declaration?.type === 'FunctionDeclaration' ||
-      declaration?.type === 'ClassDeclaration' ||
+/**
+ * Every name a file declares at the top level, imports and types included,
+ * and every name it exports.
+ */
+function topLevelNames(editor: SourceEditor): Set<string> {
+  const names = new Set(editor.scopes.program.bindings.keys())
+  for (const statement of editor.program.body) {
+    const declaration = statement.type === 'ExportNamedDeclaration' ? statement.declaration : statement
+    if (
       declaration?.type === 'TSTypeAliasDeclaration' ||
       declaration?.type === 'TSInterfaceDeclaration' ||
       declaration?.type === 'TSEnumDeclaration'
     ) {
-      if (declaration.id) names.add(declaration.id.name)
-    } else if (statement.type === 'ImportDeclaration') {
-      for (const specifier of statement.specifiers) names.add(specifier.local.name)
+      names.add(declaration.id.name)
     }
-
     if (statement.type === 'ExportNamedDeclaration') {
       for (const specifier of statement.specifiers) {
         if (specifier.exported.type === 'Identifier') names.add(specifier.exported.name)
       }
     }
   }
-
   return names
 }
 
@@ -200,7 +155,6 @@ function mergeImport(
   request: CsfImportRequest,
   taken: Set<string>,
   snippetBindings: Set<string>,
-  quote: "'" | '"',
 ): Map<string, string> {
   const aliases = new Map<string, string>()
   const requested = [
@@ -231,7 +185,7 @@ function mergeImport(
     const binding = existing?.specifier.local.name ?? uniqueExportName(taken, local)
     if (existing) {
       const { declaration } = existing
-      const kept = declaration.specifiers.filter((s: ImportSpecifier) => s !== existing.specifier)
+      const kept = declaration.specifiers.filter(specifier => specifier !== existing.specifier)
       if (kept.length === 0) {
         tools.removeStatement(editor, declaration)
       } else {
@@ -244,8 +198,8 @@ function mergeImport(
     const named = imported === binding ? binding : `${imported} as ${binding}`
     const target = importsFrom(editor.program, request.source).find(node =>
       (node.importKind === 'type') === !!request.typeOnly &&
-      !node.specifiers.some((s: ImportSpecifier) => s.type === 'ImportNamespaceSpecifier') &&
-      (imported !== 'default' || !node.specifiers.some((s: ImportSpecifier) => s.type === 'ImportDefaultSpecifier')))
+      !node.specifiers.some(specifier => specifier.type === 'ImportNamespaceSpecifier') &&
+      (imported !== 'default' || !node.specifiers.some(specifier => specifier.type === 'ImportDefaultSpecifier')))
     if (target) {
       tools.setImportSpecifiers(
         editor,
@@ -257,7 +211,7 @@ function mergeImport(
       const clause = imported === 'default' ? binding : `{ ${named} }`
       tools.insertAfterImports(
         editor,
-        `import ${request.typeOnly ? 'type ' : ''}${clause} from ${tools.printString(request.source, quote)};`,
+        `import ${request.typeOnly ? 'type ' : ''}${clause} from ${tools.printString(request.source, editor.quote)};`,
       )
     }
     editor.commit()
@@ -287,7 +241,7 @@ function parseStorySnippet(
     : ''
   const snippet = new tools.SourceEditor(`${prefix}${storySource}`, fileName)
   const declaration = prefix ? snippet.program.body[0] : undefined
-  const isRequired = (binding: { declaration?: ESTreeNode }) =>
+  const isRequired = (binding: Binding) =>
     !!declaration && binding.declaration === declaration
 
   const bindings = new Set<string>()
@@ -335,7 +289,8 @@ export async function writeStoryIntoCsf(
       fileName,
     }).parse()
 
-    const taken = collectTopLevelBindings(csf._program)
+    const editor = new tools.SourceEditor(existingCode, fileName)
+    const taken = topLevelNames(editor)
     for (const name of Object.keys(csf._storyExports)) taken.add(name)
     const requiredNames = [...new Set(request.requiredImports.flatMap(imp => [
       ...(imp.specifiers ?? []), ...(imp.defaultSpecifier ? [imp.defaultSpecifier] : []),
@@ -350,11 +305,9 @@ export async function writeStoryIntoCsf(
       fileName,
     )
     for (const name of snippet.bindings) taken.add(name)
-    const quote = detectQuote(existingCode)
-    const editor = new tools.SourceEditor(existingCode, fileName)
     const aliases = new Map<string, string>()
     for (const importRequest of request.requiredImports) {
-      for (const [name, binding] of mergeImport(tools, editor, importRequest, taken, snippet.bindings, quote)) {
+      for (const [name, binding] of mergeImport(tools, editor, importRequest, taken, snippet.bindings)) {
         aliases.set(name, binding)
       }
     }
@@ -362,21 +315,14 @@ export async function writeStoryIntoCsf(
 
     // The story goes after everything else in the file, trailing comments
     // included, a blank line apart.
-    const { code: current, edits } = editor
-    const contentEnd = current.trimEnd().length
-    const appended = `${contentEnd > 0 ? '\n\n' : ''}${story}\n`
-    if (contentEnd < current.length) {
-      edits.overwrite(contentEnd, current.length, appended)
-    } else {
-      edits.append(appended)
-    }
+    const contentEnd = editor.code.trimEnd().length
+    editor.edits.remove(contentEnd, editor.code.length)
+    editor.edits.append(`${contentEnd > 0 ? '\n\n' : ''}${story}\n`)
     // Throws when the result does not parse.
     editor.commit()
 
-    const code = editor.toString()
-    const withTrailingNewline = code.endsWith('\n') ? code : `${code}\n`
     return {
-      code: normalizeLineEndings(withTrailingNewline, detectLineEnding(existingCode)),
+      code: normalizeLineEndings(editor.toString(), detectLineEnding(existingCode)),
       exportName,
     }
   } catch (error) {
