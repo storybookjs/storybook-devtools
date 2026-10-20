@@ -69,12 +69,13 @@ messages, and docks.
 `src/frameworks/<fw>/transform.ts` runs at build time. Neither transform
 wraps components.
 
-- **React**: a Babel AST transform (Babel re-exported from
-  `storybook/internal/babel`, not a direct dependency) that appends one
-  idempotent call,
+- **React**: parses the module with `parseModule` from
+  `storybook/internal/csf-tools` (OXC, not a direct dependency) and appends
+  the runtime import plus one idempotent call per exported component,
   `__chRegisterMeta(Component, { componentName, filePath,
-  relativeFilePath, sourceId, isDefaultExport })`. The fiber tree is
-  untouched.
+  relativeFilePath, sourceId, isDefaultExport })`, after the module body.
+  The module's own text and line numbers are untouched, and so is the
+  fiber tree.
 - **Vue**: prepends a runtime import and `registerComponentSource(filePath)`
   call to the `<script setup>`/`<script>` block. Everything else is preserved
   byte-for-byte. The runtime accepts only these source paths, respecting the
@@ -239,17 +240,22 @@ stays hand-rolled in `src/utils/story-generator.ts` (`generateArgsContent`,
 no equivalent, since its own `save-story` flow re-serialises args that were
 already typed rather than arbitrary runtime values. **File mutation** —
 appending the rendered export to a file that already exists — runs through
-`src/utils/csf-writer.ts` on the CSF AST:
+`src/utils/csf-writer.ts` through the `CsfFile` editor:
 `loadCsf().parse()`, dedupe the export name against `_storyExports` plus
-every other top-level binding, merge the needed imports onto the AST
-(extending a matching `ImportDeclaration` where there is one), push the
-story's statements (parsed with `babelParse` from
-`storybook/internal/babel`) onto `program.body`, and `printCsf()`.
+every other top-level binding of `csf._program`, merge the needed imports
+with the csf-tools import helpers (`setImportSpecifiers` extends a matching
+`ImportDeclaration` where there is one, `insertAfterImports` adds a new one,
+`removeStatement` drops an emptied one), append the story after everything
+else in the file, a blank line apart, and print. These edits run in their own
+`SourceEditor` of the file, so their intermediate commits only parse the file
+again and do not index it as CSF.
 Import merging matches exported symbols, reuses aliases, promotes type-only
 bindings when a value is needed, and allocates free names for collisions.
-Only references in the appended snippet are rewritten.
-Recast reuses each untouched node's original source, so comments, quote
-style and formatting elsewhere in the file survive byte-identically.
+Only references in the appended snippet are rewritten: the snippet is parsed
+on its own in a `SourceEditor`, and its scope analysis finds the references
+to rename, skipping names a local shadows. Edits are text edits, so
+comments, quote style and formatting elsewhere in the file survive
+byte-identically.
 
 Generators are `async` because `storybook/internal/csf-tools` is imported
 lazily — same `webpackIgnore` reasoning as `src/story-index.ts`.
@@ -287,10 +293,9 @@ alias if the file declares one, else no annotation. Mixing formats makes
 factory file (`const x = preview.meta(`) and never emits CSF3 into it.
 
 **Line endings.** The writer detects the existing file's line ending (CRLF
-when most breaks are CRLF, else LF), passes it to `printCsf` as
-`lineTerminator` and normalises the result. `printCsf` defaults to `os.EOL`
-on Storybook 10 and always LF on 11, so relying on either default would
-change endings on one of them.
+when most breaks are CRLF, else LF) and normalises the result to it.
+csf-tools' `SourceEditor` ends every line like the file's first one, which
+differs for a file with mixed endings.
 
 **Fallback rule.** `writeStoryIntoCsf` returns `{ code, exportName,
 fallbackReason? }`. When `loadCsf` throws — a story file with
@@ -418,11 +423,7 @@ module. `src/story-index.ts`, `src/storybook-project.ts`,
 `src/storybook-launch.ts` and `src/utils/csf-writer.ts` mark every such
 import with a `/* webpackIgnore: true */` magic comment — inert on
 Vite/Rollup, which don't recognize it — so webpack leaves them as real
-runtime `import()`s instead of bundling them. `csf-writer.ts` loads
-`storybook/internal/babel` the same way, and for a second reason: the AST it
-assembles is printed by csf-tools' recast, which only reprints nodes it
-recognises as unchanged, so a Babel copy bundled by webpack mixed with the
-natively loaded csf-tools makes every append fall back to the text splice.
+runtime `import()`s instead of bundling them.
 
 **Peer dependency loading.** `storybook` is a required peer. Node-side
 code reaches `storybook/internal/*` through `src/storybook-peer.ts`

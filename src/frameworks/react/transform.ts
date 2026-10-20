@@ -15,31 +15,20 @@
 
 // @ts-nocheck
 import * as path from 'path'
-import type { types as T } from 'storybook/internal/babel'
+import type { ESTree as T } from 'storybook/internal/csf-tools'
 import type { TransformFunction, TransformOptions } from '../types'
 import { loadStorybookInternal } from '../../storybook-peer'
 
-type BabelModule = typeof import('storybook/internal/babel')
+type CsfTools = typeof import('storybook/internal/csf-tools')
 
-// Storybook's Babel re-exports, loaded on first use through the guarded
-// peer loader rather than a static import, so a missing or too-old
-// `storybook` fails with the peer requirement instead of a bare module
-// resolution error at host config load.
-let babelModule: BabelModule | undefined
-function babel(): BabelModule {
-  return (babelModule ??= loadStorybookInternal<BabelModule>('babel'))
+// Storybook's csf-tools, which parses with OXC, loaded on first use through
+// the guarded peer loader rather than a static import, so a missing or
+// too-old `storybook` fails with the peer requirement instead of a bare
+// module resolution error at host config load.
+let csfTools: CsfTools | undefined
+function tools(): CsfTools {
+  return (csfTools ??= loadStorybookInternal<CsfTools>('csf-tools'))
 }
-const t = new Proxy({} as BabelModule['types'], {
-  get: (_target, key) =>
-    (babel().types as unknown as Record<PropertyKey, unknown>)[key],
-})
-const traverse: BabelModule['traverse'] = ((...args) =>
-  babel().traverse(...args)) as BabelModule['traverse']
-const generate: BabelModule['generate'] = ((...args) =>
-  babel().generate(...args)) as BabelModule['generate']
-
-const parse: BabelModule['parser']['parse'] = (...args) =>
-  babel().parser.parse(...args)
 
 function createHash(data: string): string {
   let hash = 0
@@ -58,15 +47,27 @@ const TAG_FN = '__chRegisterMeta'
 
 /**
  * Detect a module-level `"use client"` directive (the RSC client-boundary
- * marker). Babel collects leading directive prologues into
- * `program.directives`, so we read it from there rather than scanning text —
- * this naturally handles either quote style and ignores `"use client"`
+ * marker). The parser marks the statements of the leading directive prologue
+ * with their `directive` text, so we read it from there rather than scanning
+ * text — this naturally handles either quote style and ignores `"use client"`
  * strings that appear deeper in the module.
  */
-function hasUseClientDirective(ast: T.File): boolean {
-  return (ast.program.directives ?? []).some(
-    (d) => d.value?.value === 'use client',
-  )
+function hasUseClientDirective(program: T.Program): boolean {
+  for (const statement of program.body) {
+    if (statement.type !== 'ExpressionStatement' || statement.directive == null) {
+      return false
+    }
+    if (statement.directive === 'use client') return true
+  }
+  return false
+}
+
+/** `file:line:column` of an offset into `code`, both 1-based. */
+function locationIn(id: string, code: string, offset: number): string {
+  const before = code.slice(0, offset)
+  const line = before.split('\n').length
+  const column = offset - (before.lastIndexOf('\n') + 1) + 1
+  return `${id}:${line}:${column}`
 }
 
 function isComponentName(name: string | undefined | null): boolean {
@@ -118,15 +119,8 @@ export const transform: TransformFunction = (
   options: TransformOptions = {},
 ): string | undefined => {
   try {
-    const ast = parse(code, {
-      sourceType: 'module',
-      plugins: [
-        'typescript',
-        'jsx',
-        ['decorators', { decoratorsBeforeExport: true }],
-      ],
-      sourceFilename: id,
-    })
+    // Offsets index `parsedCode`, which has its line endings normalized.
+    const { program, code: parsedCode } = tools().parseModule(code, id)
 
     // RSC gate: in `rsc` mode, only client components (modules with a
     // `"use client"` directive) are instrumented. Server components never
@@ -134,18 +128,17 @@ export const transform: TransformFunction = (
     // client runtime into the server module graph. In a plain SPA (rsc off)
     // there is no directive but every component is a client component, so we
     // tag everything — hence this gate is opt-in.
-    if (options.rsc && !hasUseClientDirective(ast)) {
+    if (options.rsc && !hasUseClientDirective(program)) {
       return undefined
     }
 
     let hasJsx = false
-    traverse(ast, {
-      JSXElement() {
+    tools().walk(program, (node) => {
+      if (hasJsx) return false
+      if (node.type === 'JSXElement' || node.type === 'JSXFragment') {
         hasJsx = true
-      },
-      JSXFragment() {
-        hasJsx = true
-      },
+        return false
+      }
     })
 
     // Top-level component declarations by name, the set of names that are
@@ -158,9 +151,7 @@ export const transform: TransformFunction = (
     let anonDefaultLoc: string | null = null
     const unsupportedHoc = new Map<string, string>() // name -> file:line:col
     const nodeLoc = (node: T.Node | null | undefined): string =>
-      node?.loc
-        ? `${id}:${node.loc.start.line}:${node.loc.start.column + 1}`
-        : id
+      node ? locationIn(id, parsedCode, node.start) : id
 
     const considerFunction = (decl: T.FunctionDeclaration) => {
       const name = decl.id?.name
@@ -187,7 +178,7 @@ export const transform: TransformFunction = (
       if (name && isComponentName(name)) topLevelComponents.add(name)
     }
 
-    for (const stmt of ast.program.body) {
+    for (const stmt of program.body) {
       if (stmt.type === 'FunctionDeclaration') {
         considerFunction(stmt)
       } else if (stmt.type === 'VariableDeclaration') {
@@ -277,52 +268,27 @@ export const transform: TransformFunction = (
 
     const relativeFilePath = path.relative(process.cwd(), id)
 
-    // import { __chRegisterMeta } from 'virtual:...'
-    ast.program.body.unshift(
-      t.importDeclaration(
-        [t.importSpecifier(t.identifier(TAG_FN), t.identifier(TAG_FN))],
-        t.stringLiteral(VIRTUAL_MODULE_ID),
-      ),
-    )
-
-    // Append tag statements at the end so const bindings are initialized.
+    // Append the import and the tag statements after the module body: the
+    // import is hoisted, the tags run once const bindings are initialized,
+    // and the module's own code keeps its text and line numbers.
+    //   import { __chRegisterMeta } from 'virtual:...'
+    //   __chRegisterMeta(Button, { componentName: "Button", ... })
+    const appended = [
+      `import { ${TAG_FN} } from ${JSON.stringify(VIRTUAL_MODULE_ID)};`,
+    ]
     for (const [name, isDefaultExport] of componentBindings) {
       const sourceId = createHash(id + ':' + name)
-      const meta = t.objectExpression([
-        t.objectProperty(
-          t.identifier('componentName'),
-          t.stringLiteral(name),
-        ),
-        t.objectProperty(t.identifier('filePath'), t.stringLiteral(id)),
-        t.objectProperty(
-          t.identifier('relativeFilePath'),
-          t.stringLiteral(relativeFilePath),
-        ),
-        t.objectProperty(
-          t.identifier('sourceId'),
-          t.stringLiteral(sourceId),
-        ),
-        t.objectProperty(
-          t.identifier('isDefaultExport'),
-          t.booleanLiteral(isDefaultExport),
-        ),
-      ])
-      ast.program.body.push(
-        t.expressionStatement(
-          t.callExpression(t.identifier(TAG_FN), [
-            t.identifier(name),
-            meta,
-          ]),
-        ),
-      )
+      const meta = [
+        `componentName: ${JSON.stringify(name)}`,
+        `filePath: ${JSON.stringify(id)}`,
+        `relativeFilePath: ${JSON.stringify(relativeFilePath)}`,
+        `sourceId: ${JSON.stringify(sourceId)}`,
+        `isDefaultExport: ${isDefaultExport}`,
+      ]
+      appended.push(`${TAG_FN}(${name}, {\n  ${meta.join(',\n  ')},\n});`)
     }
 
-    const output = generate(ast, {
-      sourceMaps: true,
-      sourceFileName: id,
-    })
-
-    return output.code
+    return `${code}${code.endsWith('\n') ? '' : '\n'}${appended.join('\n')}\n`
   } catch (error) {
     const detail = (error as { message?: string })?.message || String(error)
     // Prefer a structured diagnostic (the plugin routes it to ctx.diagnostics);

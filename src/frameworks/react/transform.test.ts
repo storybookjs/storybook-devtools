@@ -1,3 +1,4 @@
+import * as path from 'path'
 import { describe, it, expect } from 'vitest'
 import { transform } from './transform'
 
@@ -313,6 +314,27 @@ export function Button() { return <button>Click</button> }
 
       expect(result).toContain('__chRegisterMeta')
       expect(result).toContain('virtual:component-highlighter/runtime')
+    })
+
+    it('keeps the module text and appends the import and tags after it', () => {
+      const code = `'use client'
+// A comment the transform keeps.
+import React from 'react'
+
+export const Button = () => <button  type="button">Click</button>
+`
+      const result = transform(code, '/src/Button.tsx')!
+
+      expect(result.startsWith(code)).toBe(true)
+      expect(result.slice(code.length)).toBe(`import { __chRegisterMeta } from "virtual:component-highlighter/runtime";
+__chRegisterMeta(Button, {
+  componentName: "Button",
+  filePath: "/src/Button.tsx",
+  relativeFilePath: ${JSON.stringify(path.relative(process.cwd(), '/src/Button.tsx'))},
+  sourceId: ${JSON.stringify(result.match(/sourceId: "([^"]+)"/)![1])},
+  isDefaultExport: false,
+});
+`)
     })
 
     it('still produces valid output if re-transformed', () => {

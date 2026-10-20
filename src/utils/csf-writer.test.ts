@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { babelParse } from 'storybook/internal/babel'
+import { parseModule } from 'storybook/internal/csf-tools'
 import { writeStoryIntoCsf } from './csf-writer'
 
 const story = `{
@@ -99,7 +99,7 @@ export const Primary = { args: { label: 'Hello' } };
     })
 
     expect(result.fallbackReason).toBeUndefined()
-    expect(() => babelParse(result.code)).not.toThrow()
+    expect(() => parseModule(result.code, base.fileName)).not.toThrow()
     expect(result.code).toContain("import { fn } from 'storybook/test';")
   })
 
@@ -131,7 +131,7 @@ export const Primary = { args: { label: 'Hello' } };
       requiredImports: [{ source: 'storybook/test', specifiers: ['fn'] }],
     })
     expect(result.fallbackReason).toBeUndefined()
-    expect(() => babelParse(result.code)).not.toThrow()
+    expect(() => parseModule(result.code, base.fileName)).not.toThrow()
     expect(result.code).toMatch(/fn as fn2/)
     expect(result.code).toContain('onClick: fn2()')
   })
@@ -144,7 +144,7 @@ export const Primary = { args: { label: 'Hello' } };
       requiredImports: [{ source: './Button', defaultSpecifier: 'Button' }],
     })
     expect(result.fallbackReason).toBeUndefined()
-    expect(() => babelParse(result.code)).not.toThrow()
+    expect(() => parseModule(result.code, base.fileName)).not.toThrow()
     expect(result.code).toContain('render: () => ExistingButton')
   })
 
@@ -154,7 +154,7 @@ export const Primary = { args: { label: 'Hello' } };
       existingCode: csf3 + '\nconst { Primary } = { Primary: 1 };',
     })
     expect(result.exportName).toBe('Primary2')
-    expect(() => babelParse(result.code)).not.toThrow()
+    expect(() => parseModule(result.code, base.fileName)).not.toThrow()
   })
 
   it('avoids imported aliases shadowed by locals in the new play function', async () => {
@@ -166,7 +166,7 @@ export const Primary = { args: { label: 'Hello' } };
     })
     expect(result.fallbackReason).toBeUndefined()
     expect(result.code).toContain('const canvas = within(canvasElement)')
-    expect(() => babelParse(result.code)).not.toThrow()
+    expect(() => parseModule(result.code, base.fileName)).not.toThrow()
   })
 
   it('reserves component imports before choosing the story export name', async () => {
@@ -180,6 +180,71 @@ export const Primary = { args: { label: 'Hello' } };
     expect(result.exportName).toBe('Button2')
     expect(result.code).toContain('Button: ExistingButton')
     expect(result.fallbackReason).toBeUndefined()
+  })
+
+  it('renames references in JSX, closing tags and member tags included', async () => {
+    const result = await writeStoryIntoCsf({
+      ...base,
+      existingCode: csf3.replace("import { Button } from './Button';", "import Btn from './Button';"),
+      storyObjectSource: '{ render: () => <Button><Button.Icon /></Button> }',
+      requiredImports: [{ source: './Button', defaultSpecifier: 'Button' }],
+    })
+    expect(result.fallbackReason).toBeUndefined()
+    expect(result.code).toContain('render: () => <Btn><Btn.Icon /></Btn>')
+  })
+
+  it('promotes an inline type specifier within its own import', async () => {
+    const result = await writeStoryIntoCsf({
+      ...base,
+      existingCode: csf3.replace(
+        "import { Button } from './Button';",
+        "import { Button } from './Button';\nimport { type fn, within } from 'storybook/test';",
+      ),
+      storyObjectSource: '{ args: { onClick: fn() } }',
+      requiredImports: [{ source: 'storybook/test', specifiers: ['fn'] }],
+    })
+    expect(result.fallbackReason).toBeUndefined()
+    expect(result.code).toContain("import { within, fn } from 'storybook/test';")
+    expect(result.code).not.toContain('type fn')
+  })
+
+  it('promotes a type import that the file also re-exports as a type', async () => {
+    const result = await writeStoryIntoCsf({
+      ...base,
+      existingCode: csf3.replace(
+        "import { Button } from './Button';",
+        "import { Button } from './Button';\nimport type { fn } from 'storybook/test';\nexport type { fn };",
+      ),
+      storyObjectSource: '{ args: { onClick: fn() } }',
+      requiredImports: [{ source: 'storybook/test', specifiers: ['fn'] }],
+    })
+    expect(result.fallbackReason).toBeUndefined()
+    expect(result.code).toContain("import { fn } from 'storybook/test';")
+    expect(result.code).not.toContain('import type { fn }')
+  })
+
+  it('adds specifiers to a side-effect import of the module', async () => {
+    const result = await writeStoryIntoCsf({
+      ...base,
+      existingCode: csf3.replace(
+        "import { Button } from './Button';",
+        "import { Button } from './Button';\nimport 'storybook/test';",
+      ),
+      requiredImports: [{ source: 'storybook/test', specifiers: ['fn'] }],
+    })
+    expect(result.fallbackReason).toBeUndefined()
+    expect(result.code).toContain("import { fn } from 'storybook/test';")
+    expect(result.code.match(/storybook\/test/g)).toHaveLength(1)
+  })
+
+  it('appends after a trailing comment and to a file without a final newline', async () => {
+    const result = await writeStoryIntoCsf({
+      ...base,
+      existingCode: `${csf3}// trailing comment`,
+    })
+    expect(result.fallbackReason).toBeUndefined()
+    expect(result.code).toContain('// trailing comment\n\nexport const Primary: Story = {')
+    expect(result.code.endsWith('};\n')).toBe(true)
   })
 
   it('round-trips CRLF line endings, including the appended story', async () => {
@@ -213,7 +278,7 @@ export const Default = meta.story({});
       expect(result.code).toContain('export const Primary = meta.story({')
       expect(result.code).not.toContain(': Story')
       expect(result.code).not.toMatch(/export const Primary = \{/)
-      expect(() => babelParse(result.code)).not.toThrow()
+      expect(() => parseModule(result.code, base.fileName)).not.toThrow()
     })
 
     it("uses the file's own meta variable name", async () => {

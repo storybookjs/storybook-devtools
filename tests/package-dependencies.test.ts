@@ -2,7 +2,7 @@ import { readdir, readFile } from 'node:fs/promises'
 import { isBuiltin } from 'node:module'
 import { join } from 'node:path'
 import { expect, it } from 'vitest'
-import { babelParse } from 'storybook/internal/babel'
+import { parseModule } from 'storybook/internal/csf-tools'
 
 it('declares the external runtime imports shipped in dist', async () => {
   const pkg = JSON.parse(await readFile('package.json', 'utf8'))
@@ -14,8 +14,8 @@ it('declares the external runtime imports shipped in dist', async () => {
       if (entry.isDirectory()) {
         await scan(file)
       } else if (file.endsWith('.mjs')) {
-        const ast = babelParse(await readFile(file, 'utf8'))
-        for (const statement of ast.program.body) {
+        const { program } = parseModule(await readFile(file, 'utf8'), file)
+        for (const statement of program.body) {
           if (!('source' in statement)) continue
           const source = statement.source?.value
           if (!source || source.startsWith('.') || source.startsWith('virtual:') || isBuiltin(source)) continue
