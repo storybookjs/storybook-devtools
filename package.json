@@ -69,7 +69,7 @@
     "play": "vite",
     "test": "vitest",
     "e2e": "playwright test",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "node scripts/typecheck.mjs",
     "release": "bumpp && pnpm publish",
     "prepublishOnly": "pnpm run build"
   },

@@ -80,10 +80,10 @@ describe('storybook peer check', () => {
 
   it('passes against this repo and loads an internal subpath synchronously', () => {
     expect(() => assertStorybookPeer()).not.toThrow()
-    const csfTools = loadStorybookInternal<{ parseModule: unknown }>(
+    const csfTools = loadStorybookInternal<{ loadCsf: unknown }>(
       'csf-tools',
     )
-    expect(typeof csfTools.parseModule).toBe('function')
+    expect(typeof csfTools.loadCsf).toBe('function')
     expect(loadStorybookInternal('csf-tools')).toBe(csfTools)
   })
 })
