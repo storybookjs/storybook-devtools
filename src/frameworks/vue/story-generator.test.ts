@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { csfToolsGeneration } from '../../test-utils/csf-tools'
 import { generateStory } from './story-generator'
 
 const meta = {
@@ -93,7 +94,7 @@ describe('vue generateStory — append to existing file', () => {
       existingContent: csf3,
     })
 
-    expect(result.content).toMatchSnapshot()
+    expect(result.content).toMatchSnapshot(csfToolsGeneration)
   })
 
   it('merges play imports into an existing storybook/test import', async () => {
@@ -133,7 +134,7 @@ describe('vue generateStory — append to existing file', () => {
       existingContent: csf3,
     })
 
-    expect(result.content).toMatchSnapshot()
+    expect(result.content).toMatchSnapshot(csfToolsGeneration)
   })
 
   it('preserves leading comments, blank lines and single quotes', async () => {

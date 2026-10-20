@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { csfToolsGeneration } from '../../test-utils/csf-tools'
 import { generateStory } from './story-generator'
 
 const meta = {
@@ -133,7 +134,7 @@ export const Default2: Story = {};
       existingContent: csf3,
     })
 
-    expect(result.content).toMatchSnapshot()
+    expect(result.content).toMatchSnapshot(csfToolsGeneration)
   })
 
   it('merges fn into an existing storybook/test import', async () => {
@@ -187,7 +188,7 @@ export const Default2: Story = {};
       existingContent: csf3,
     })
 
-    expect(result.content).toMatchSnapshot()
+    expect(result.content).toMatchSnapshot(csfToolsGeneration)
   })
 
   it('preserves leading comments, blank lines, single quotes and trailing commas', async () => {
@@ -242,7 +243,7 @@ export const Default: Story = {};
       existingContent,
     })
 
-    expect(result.content).toMatchSnapshot()
+    expect(result.content).toMatchSnapshot(csfToolsGeneration)
   })
 
   it('appends to a file containing a CSF2 story', async () => {

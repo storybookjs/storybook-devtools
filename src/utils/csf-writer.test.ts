@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseModule } from 'storybook/internal/csf-tools'
+import { parseWithStorybook } from '../test-utils/csf-tools'
 import { writeStoryIntoCsf } from './csf-writer'
 
 const story = `{
@@ -99,7 +99,7 @@ export const Primary = { args: { label: 'Hello' } };
     })
 
     expect(result.fallbackReason).toBeUndefined()
-    expect(() => parseModule(result.code, base.fileName)).not.toThrow()
+    expect(() => parseWithStorybook(result.code, base.fileName)).not.toThrow()
     expect(result.code).toContain("import { fn } from 'storybook/test';")
   })
 
@@ -131,7 +131,7 @@ export const Primary = { args: { label: 'Hello' } };
       requiredImports: [{ source: 'storybook/test', specifiers: ['fn'] }],
     })
     expect(result.fallbackReason).toBeUndefined()
-    expect(() => parseModule(result.code, base.fileName)).not.toThrow()
+    expect(() => parseWithStorybook(result.code, base.fileName)).not.toThrow()
     expect(result.code).toMatch(/fn as fn2/)
     expect(result.code).toContain('onClick: fn2()')
   })
@@ -144,7 +144,7 @@ export const Primary = { args: { label: 'Hello' } };
       requiredImports: [{ source: './Button', defaultSpecifier: 'Button' }],
     })
     expect(result.fallbackReason).toBeUndefined()
-    expect(() => parseModule(result.code, base.fileName)).not.toThrow()
+    expect(() => parseWithStorybook(result.code, base.fileName)).not.toThrow()
     expect(result.code).toContain('render: () => ExistingButton')
   })
 
@@ -154,7 +154,7 @@ export const Primary = { args: { label: 'Hello' } };
       existingCode: csf3 + '\nconst { Primary } = { Primary: 1 };',
     })
     expect(result.exportName).toBe('Primary2')
-    expect(() => parseModule(result.code, base.fileName)).not.toThrow()
+    expect(() => parseWithStorybook(result.code, base.fileName)).not.toThrow()
   })
 
   it('avoids imported aliases shadowed by locals in the new play function', async () => {
@@ -166,7 +166,7 @@ export const Primary = { args: { label: 'Hello' } };
     })
     expect(result.fallbackReason).toBeUndefined()
     expect(result.code).toContain('const canvas = within(canvasElement)')
-    expect(() => parseModule(result.code, base.fileName)).not.toThrow()
+    expect(() => parseWithStorybook(result.code, base.fileName)).not.toThrow()
   })
 
   it('reserves component imports before choosing the story export name', async () => {
@@ -288,7 +288,7 @@ export const Default = meta.story({});
       expect(result.code).toContain('export const Primary = meta.story({')
       expect(result.code).not.toContain(': Story')
       expect(result.code).not.toMatch(/export const Primary = \{/)
-      expect(() => parseModule(result.code, base.fileName)).not.toThrow()
+      expect(() => parseWithStorybook(result.code, base.fileName)).not.toThrow()
     })
 
     it("uses the file's own meta variable name", async () => {

@@ -14,19 +14,21 @@
  * `story-generator.ts`: csf-tools has no equivalent, its `save-story` flow
  * serialises already-typed args rather than arbitrary runtime values.
  *
- * `CsfFile` from `storybook/internal/csf-tools` validates the file and
- * supplies its stories, meta and export style. The edits are text edits in a
- * `SourceEditor` of the same source, so code the writer does not touch stays
- * as written; only a file with mixed line endings comes back with its
- * majority ending. A file `CsfFile` rejects falls back to a regex splice.
+ * `loadCsf().parse()` validates the file and tells a factory file from a
+ * CSF3 one on every supported Storybook. Reading and editing the file's
+ * syntax differs: Storybook 10 hands out Babel nodes and prints with
+ * recast, Storybook 11 hands out ESTree nodes and edits text. Those steps
+ * sit behind `StoryFileEditor`, implemented by `csf-writer-babel.ts` and
+ * `csf-writer-estree.ts`; the rules for names and imports are written once
+ * here. A file `CsfFile` rejects falls back to a regex splice.
+ *
  * `storybook/internal/csf-tools` is imported lazily so it does not land in
  * Next's server webpack bundle — see `src/story-index.ts` for the
- * `webpackIgnore` reasoning.
+ * `webpackIgnore` reasoning. The editors import their Storybook modules the
+ * same way.
  */
-import type { Binding, CsfFile, ESTree, SourceEditor } from 'storybook/internal/csf-tools'
+import type { CsfFile } from 'storybook/internal/csf-tools'
 import { escapeRegex, renderStoryExport, type ExportStyle } from './story-generator'
-
-type CsfTools = typeof import('storybook/internal/csf-tools')
 
 export interface CsfImportRequest {
   /** Module specifier, e.g. `storybook/test` or `./Button`. */
@@ -63,10 +65,94 @@ export interface CsfWriteResult {
   fallbackReason?: string
 }
 
+/** One specifier of an import declaration; namespace specifiers excluded. */
+export interface ImportSpecifierInfo {
+  /** `default` for `import X from`, `named` for `import { a as X } from`. */
+  readonly kind: 'default' | 'named'
+  /** The exported name it imports: `default` for a default specifier. */
+  readonly imported: string
+  /** The local binding. */
+  readonly local: string
+  /** An inline `type` specifier, `import { type X } from`. */
+  readonly typeOnly: boolean
+}
+
+/** One import declaration of a story file, as the import rules read it. */
+export interface ImportDeclarationInfo {
+  /** `import type { ... } from`. */
+  readonly typeOnly: boolean
+  readonly hasDefault: boolean
+  readonly hasNamespace: boolean
+  readonly specifiers: readonly ImportSpecifierInfo[]
+}
+
+/**
+ * The syntax-level reads and edits of one story file. Import lookups
+ * reflect every edit made before them; `ImportDeclarationInfo` and
+ * `ImportSpecifierInfo` values are only valid until the next edit.
+ */
+export interface StoryFileEditor {
+  /**
+   * Every name the file declares at the top level, imports and types
+   * included, and every name it exports.
+   */
+  topLevelNames(): Set<string>
+  /**
+   * How the file's CSF3 stories are typed: the first story's annotation or
+   * `satisfies` clause, else the `Story` type alias when the file declares
+   * one, else untyped.
+   */
+  csf3Style(): ExportStyle
+  /** The import declarations of `source`, in file order. */
+  importsFrom(source: string): ImportDeclarationInfo[]
+  /** Removes `specifier`, and its declaration once that is empty. */
+  removeSpecifier(declaration: ImportDeclarationInfo, specifier: ImportSpecifierInfo): void
+  /** Adds `imported as local` (or a default `local`) to `declaration`. */
+  addSpecifier(declaration: ImportDeclarationInfo, imported: string, local: string): void
+  /** Adds an import of `imported as local` below the file's imports. */
+  addImport(source: string, imported: string, local: string, typeOnly: boolean): void
+  /**
+   * Parses the new story's source on its own and returns every name it
+   * declares, at any depth. `requiredNames` are the names it may take
+   * from the required imports.
+   */
+  parseStory(source: string, requiredNames: string[]): Set<string>
+  /**
+   * Points the story's references to required imports at the bindings in
+   * `aliases`, skipping references a local shadows, appends the story and
+   * returns the file. Throws when the result does not parse.
+   */
+  print(aliases: Map<string, string>): string
+}
+
+/** The `StoryFileEditor` of one csf-tools generation. */
+export interface CsfWriterSyntax {
+  open(csf: CsfFile, code: string, fileName: string, lineEnding: '\r\n' | '\n'): StoryFileEditor
+}
+
+let syntax: Promise<CsfWriterSyntax> | undefined
+
+/**
+ * The editor for the installed Storybook: ESTree when its csf-tools have
+ * `parseModule`, Babel otherwise. Each is imported only on the Storybook
+ * it is written for: on Storybook 11 `storybook/internal/babel` does not
+ * resolve, and Storybook 10 lacks the ESTree csf-tools API.
+ */
+function csfWriterSyntax(): Promise<CsfWriterSyntax> {
+  return (syntax ??= (async () => {
+    const csfTools = await import(/* webpackIgnore: true */ 'storybook/internal/csf-tools')
+    const editor = typeof (csfTools as { parseModule?: unknown }).parseModule === 'function'
+      ? await import('./csf-writer-estree')
+      : await import('./csf-writer-babel')
+    return editor.loadCsfWriterSyntax()
+  })())
+}
+
 /**
  * The line ending a file uses: CRLF when most of its line breaks are CRLF,
- * LF otherwise. `SourceEditor` ends every line like the file's first one, so a
- * file with mixed endings is normalised to its majority style here instead.
+ * LF otherwise. Neither editor keeps a file's line endings on its own
+ * (recast prints with one terminator, `SourceEditor` ends every line like
+ * the file's first one), so the output is normalised to the majority.
  */
 function detectLineEnding(code: string): '\r\n' | '\n' {
   const crlf = (code.match(/\r\n/g) ?? []).length
@@ -79,33 +165,6 @@ function normalizeLineEndings(code: string, lineEnding: '\r\n' | '\n'): string {
   return code.replace(/\r?\n/g, lineEnding)
 }
 
-/**
- * The export style of a parsed CSF file: factory when `CsfFile` recognised a
- * `preview.meta(...)` call, otherwise CSF3 typed like its existing stories —
- * the first story's annotation or `satisfies` clause, else the `Story` type
- * alias when the file declares one, else untyped.
- */
-function detectExportStyle(csf: CsfFile): ExportStyle {
-  if (csf._metaIsFactory) {
-    return { kind: 'factory', metaName: csf._metaVariableName ?? 'meta' }
-  }
-  for (const story of Object.values(csf._storyExports)) {
-    if (story.type !== 'VariableDeclarator') continue
-    if (story.id.type === 'Identifier' && story.id.typeAnnotation) {
-      return { kind: 'csf3', annotation: csf._editor.source(story.id.typeAnnotation.typeAnnotation) }
-    }
-    if (story.init?.type === 'TSSatisfiesExpression') {
-      return { kind: 'csf3', satisfies: csf._editor.source(story.init.typeAnnotation) }
-    }
-  }
-  const declaresStoryType = csf._program.body.some(statement => {
-    const node = statement.type === 'ExportNamedDeclaration' ? statement.declaration : statement
-    return (node?.type === 'TSTypeAliasDeclaration' || node?.type === 'TSInterfaceDeclaration') &&
-      node.id.name === 'Story'
-  })
-  return declaresStoryType ? { kind: 'csf3', annotation: 'Story' } : { kind: 'csf3' }
-}
-
 function uniqueExportName(taken: Set<string>, desired: string): string {
   if (!taken.has(desired)) return desired
   let counter = 2
@@ -113,45 +172,9 @@ function uniqueExportName(taken: Set<string>, desired: string): string {
   return `${desired}${counter}`
 }
 
-/**
- * Every name a file declares at the top level, imports and types included,
- * and every name it exports.
- */
-function topLevelNames(editor: SourceEditor): Set<string> {
-  const names = new Set(editor.scopes.program.bindings.keys())
-  for (const statement of editor.program.body) {
-    const declaration = statement.type === 'ExportNamedDeclaration' ? statement.declaration : statement
-    if (
-      declaration?.type === 'TSTypeAliasDeclaration' ||
-      declaration?.type === 'TSInterfaceDeclaration' ||
-      declaration?.type === 'TSEnumDeclaration'
-    ) {
-      names.add(declaration.id.name)
-    }
-    if (statement.type === 'ExportNamedDeclaration') {
-      for (const specifier of statement.specifiers) {
-        if (specifier.exported.type === 'Identifier') names.add(specifier.exported.name)
-      }
-    }
-  }
-  return names
-}
-
-function importsFrom(program: ESTree.Program, source: string): ESTree.ImportDeclaration[] {
-  return program.body.filter((node): node is ESTree.ImportDeclaration =>
-    node.type === 'ImportDeclaration' && node.source.value === source)
-}
-
-/**
- * Resolve imports by exported symbol; reuse aliases and promote type bindings.
- * Each change is committed before the next lookup, so every step reads the
- * file's imports as the previous step left them. The editor is not the
- * `CsfFile`'s, so a commit only parses the file again: it does not index it
- * as CSF, which a file can briefly fail while a type import is promoted.
- */
+/** Resolve imports by exported symbol; reuse aliases and promote type bindings. */
 function mergeImport(
-  tools: CsfTools,
-  editor: SourceEditor,
+  file: StoryFileEditor,
   request: CsfImportRequest,
   taken: Set<string>,
   snippetBindings: Set<string>,
@@ -162,115 +185,39 @@ function mergeImport(
     ...(request.specifiers ?? []).map(name => ({ imported: name, local: name })),
   ]
   for (const { imported, local } of requested) {
-    const candidates = importsFrom(editor.program, request.source).flatMap(declaration =>
+    const candidates = file.importsFrom(request.source).flatMap(declaration =>
       declaration.specifiers
         .filter(specifier => imported === 'default'
-          ? specifier.type === 'ImportDefaultSpecifier'
-          : specifier.type === 'ImportSpecifier' &&
-            (specifier.imported.type === 'Identifier' ? specifier.imported.name : specifier.imported.value) === imported)
+          ? specifier.kind === 'default'
+          : specifier.kind === 'named' && specifier.imported === imported)
         .map(specifier => ({ declaration, specifier })))
     const isType = ({ declaration, specifier }: typeof candidates[number]) =>
-      declaration.importKind === 'type' ||
-      (specifier.type === 'ImportSpecifier' && specifier.importKind === 'type')
+      declaration.typeOnly || specifier.typeOnly
     const reusable = candidates.filter(candidate =>
-      !snippetBindings.has(candidate.specifier.local.name))
+      !snippetBindings.has(candidate.specifier.local))
     const existing = reusable.find(candidate => !isType(candidate)) ?? reusable[0]
     if (existing && (request.typeOnly || !isType(existing))) {
-      aliases.set(local, existing.specifier.local.name)
+      aliases.set(local, existing.specifier.local)
       continue
     }
 
     // A type-only binding of the same symbol can serve both uses once
     // promoted. Leave other specifiers in the original type declaration.
-    const binding = existing?.specifier.local.name ?? uniqueExportName(taken, local)
-    if (existing) {
-      const { declaration } = existing
-      const kept = declaration.specifiers.filter(specifier => specifier !== existing.specifier)
-      if (kept.length === 0) {
-        tools.removeStatement(editor, declaration)
-      } else {
-        tools.setImportSpecifiers(editor, declaration, kept)
-      }
-      editor.commit()
-    }
+    const binding = existing?.specifier.local ?? uniqueExportName(taken, local)
+    if (existing) file.removeSpecifier(existing.declaration, existing.specifier)
     taken.add(binding)
     aliases.set(local, binding)
-    const named = imported === binding ? binding : `${imported} as ${binding}`
-    const target = importsFrom(editor.program, request.source).find(node =>
-      (node.importKind === 'type') === !!request.typeOnly &&
-      !node.specifiers.some(specifier => specifier.type === 'ImportNamespaceSpecifier') &&
-      (imported !== 'default' || !node.specifiers.some(specifier => specifier.type === 'ImportDefaultSpecifier')))
+    const target = file.importsFrom(request.source).find(declaration =>
+      declaration.typeOnly === !!request.typeOnly &&
+      !declaration.hasNamespace &&
+      (imported !== 'default' || !declaration.hasDefault))
     if (target) {
-      tools.setImportSpecifiers(
-        editor,
-        target,
-        target.specifiers,
-        imported === 'default' ? { default: binding } : { named: [named] },
-      )
+      file.addSpecifier(target, imported, binding)
     } else {
-      const clause = imported === 'default' ? binding : `{ ${named} }`
-      tools.insertAfterImports(
-        editor,
-        `import ${request.typeOnly ? 'type ' : ''}${clause} from ${tools.printString(request.source, editor.quote)};`,
-      )
+      file.addImport(request.source, imported, binding, !!request.typeOnly)
     }
-    editor.commit()
   }
   return aliases
-}
-
-// Source of the import that declares the required names in the parsed story
-// snippet, so their references in it resolve to one binding each. It is never
-// written to the file.
-const SNIPPET_IMPORT_SOURCE = 'storybook-devtools:required-imports'
-
-/**
- * The new story's source, parsed on its own with the required import names
- * declared above it. `bindings` holds every name the story itself declares,
- * at any depth; `rename` points the story's references to required imports at
- * the bindings the file provides, skipping references a local shadows.
- */
-function parseStorySnippet(
-  tools: CsfTools,
-  storySource: string,
-  requiredNames: string[],
-  fileName: string,
-) {
-  const prefix = requiredNames.length > 0
-    ? `import { ${requiredNames.join(', ')} } from '${SNIPPET_IMPORT_SOURCE}';\n`
-    : ''
-  const snippet = new tools.SourceEditor(`${prefix}${storySource}`, fileName)
-  const declaration = prefix ? snippet.program.body[0] : undefined
-  const isRequired = (binding: Binding) =>
-    !!declaration && binding.declaration === declaration
-
-  const bindings = new Set<string>()
-  const { scopes } = snippet
-  tools.walk(snippet.program, node => {
-    for (const binding of scopes.scopeOf(node).bindings.values()) {
-      if (!isRequired(binding)) bindings.add(binding.name)
-    }
-  })
-
-  const rename = (aliases: Map<string, string>): string => {
-    for (const binding of scopes.program.bindings.values()) {
-      const target = aliases.get(binding.name)
-      if (!isRequired(binding) || !target || target === binding.name) continue
-      for (const reference of binding.references) {
-        if (reference.type !== 'Identifier' && reference.type !== 'JSXIdentifier') continue
-        const parent = snippet.parentOf(reference)
-        const shorthand = parent?.type === 'Property' && parent.shorthand && parent.value === reference
-        snippet.edits.overwrite(
-          reference.start,
-          reference.end,
-          shorthand ? `${binding.name}: ${target}` : target,
-        )
-      }
-    }
-    return snippet.edits.toString().slice(prefix.length)
-  }
-
-  return { bindings, rename }
 }
 
 /**
@@ -283,46 +230,41 @@ export async function writeStoryIntoCsf(
   const { existingCode, fileName, desiredExportName } = request
 
   try {
-    const tools = await import(/* webpackIgnore: true */ 'storybook/internal/csf-tools')
-    const csf = tools.loadCsf(existingCode, {
+    const [{ loadCsf }, { open }] = await Promise.all([
+      import(/* webpackIgnore: true */ 'storybook/internal/csf-tools'),
+      csfWriterSyntax(),
+    ])
+    const csf = loadCsf(existingCode, {
       makeTitle: (userTitle: string) => userTitle || 'Auto',
       fileName,
     }).parse()
 
-    const editor = new tools.SourceEditor(existingCode, fileName)
-    const taken = topLevelNames(editor)
+    const lineEnding = detectLineEnding(existingCode)
+    const file = open(csf, existingCode, fileName, lineEnding)
+    const taken = file.topLevelNames()
     for (const name of Object.keys(csf._storyExports)) taken.add(name)
     const requiredNames = [...new Set(request.requiredImports.flatMap(imp => [
       ...(imp.specifiers ?? []), ...(imp.defaultSpecifier ? [imp.defaultSpecifier] : []),
     ]))]
     const exportName = uniqueExportName(new Set([...taken, ...requiredNames]), desiredExportName)
 
-    const style = detectExportStyle(csf)
-    const snippet = parseStorySnippet(
-      tools,
+    const style: ExportStyle = csf._metaIsFactory
+      ? { kind: 'factory', metaName: csf._metaVariableName ?? 'meta' }
+      : file.csf3Style()
+    const snippetBindings = file.parseStory(
       renderStoryExport(style, exportName, request.storyObjectSource),
       requiredNames,
-      fileName,
     )
-    for (const name of snippet.bindings) taken.add(name)
+    for (const name of snippetBindings) taken.add(name)
     const aliases = new Map<string, string>()
     for (const importRequest of request.requiredImports) {
-      for (const [name, binding] of mergeImport(tools, editor, importRequest, taken, snippet.bindings)) {
+      for (const [name, binding] of mergeImport(file, importRequest, taken, snippetBindings)) {
         aliases.set(name, binding)
       }
     }
-    const story = snippet.rename(aliases).trim()
-
-    // The story goes after everything else in the file, trailing comments
-    // included, a blank line apart.
-    const contentEnd = editor.code.trimEnd().length
-    editor.edits.remove(contentEnd, editor.code.length)
-    editor.edits.append(`${contentEnd > 0 ? '\n\n' : ''}${story}\n`)
-    // Throws when the result does not parse.
-    editor.commit()
 
     return {
-      code: normalizeLineEndings(editor.toString(), detectLineEnding(existingCode)),
+      code: normalizeLineEndings(file.print(aliases), lineEnding),
       exportName,
     }
   } catch (error) {
