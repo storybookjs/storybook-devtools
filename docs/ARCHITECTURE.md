@@ -271,9 +271,9 @@ lazily:
   `scopes.tsDeclarationNames`), plus the names of `export { … }`
   specifiers. Every commit parses and indexes the file again, so an edit
   that leaves invalid CSF throws and the writer falls back to the text
-  splice. One case does so for now: promoting a type import the file also
-  re-exports (`export type { fn }`). Removing the type import commits, and
-  the CSF index rejects the re-export without it. The snippet is
+  splice. Promoting a type-only import waits for the value import that
+  replaces it, and both go in one commit: a file that re-exports the type
+  (`export type { fn }`) is not valid CSF with neither import. The snippet is
   parsed in its own `SourceEditor`, whose scope analysis finds the
   references to rename. The story goes after everything else in the file,
   a blank line apart.
@@ -333,7 +333,9 @@ fallbackReason? }`. When `loadCsf` throws — a story file with
 no default export, or one that does not parse — the writer falls back to a
 regex splice rather than failing story creation, and reports why via
 `fallbackReason`, which the generator passes back on `GeneratedStory` and
-`create-story.ts` logs through `logDebug`.
+`create-story.ts` logs through `logDebug`. The splice refuses, and nothing
+is written, when the story needs a value import of a name the file imports
+as a type only: adding it would declare the name twice.
 
 Before writing, `create-story.ts` runs the content through
 `formatStoryFile`, a wrapper over `formatFileContent` from

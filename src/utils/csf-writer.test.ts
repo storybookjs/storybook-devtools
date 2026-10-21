@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { csfToolsGeneration, parseWithStorybook } from '../test-utils/csf-tools'
+import { parseWithStorybook } from '../test-utils/csf-tools'
 import { writeStoryIntoCsf } from './csf-writer'
 
 const story = `{
@@ -73,6 +73,19 @@ export const Default = { args: { label: 'Hello' } };
     expect(result.fallbackReason).toBeTruthy()
     expect(result.code).toContain('export const Primary: Story = {')
     expect(result.code).toContain("import { Button } from './Button';")
+  })
+
+  it('refuses a fallback splice that would import a type-only name again', async () => {
+    const existingCode = `import type { fn } from 'storybook/test';
+
+export const Default = { args: { label: 'Hello' } };
+`
+    await expect(writeStoryIntoCsf({
+      ...base,
+      existingCode,
+      storyObjectSource: '{ args: { onClick: fn() } }',
+      requiredImports: [{ source: 'storybook/test', specifiers: ['fn'] }],
+    })).rejects.toThrow('imports `fn` as a type')
   })
 
   it('dedupes in the fallback path as well', async () => {
@@ -218,17 +231,11 @@ export const Primary = { args: { label: 'Hello' } };
       storyObjectSource: '{ args: { onClick: fn() } }',
       requiredImports: [{ source: 'storybook/test', specifiers: ['fn'] }],
     })
-    if (csfToolsGeneration === 'estree') {
-      // Not yet on the ESTree path: removing `import type { fn }` commits,
-      // the commit indexes the file, and the CSF index rejects
-      // `export type { fn }` without its import. csf-tools would have to
-      // index once after `CsfFile.setImport` has promoted the binding.
-      expect(result.fallbackReason).toContain("Export 'fn' is not defined")
-      return
-    }
     expect(result.fallbackReason).toBeUndefined()
-    expect(result.code).toContain("import { fn } from 'storybook/test';")
-    expect(result.code).not.toContain('import type { fn }')
+    expect(() => parseWithStorybook(result.code, base.fileName)).not.toThrow()
+    expect(result.code.match(/import (type )?\{ fn \}/g)).toEqual(['import { fn }'])
+    expect(result.code).toContain('export type { fn };')
+    expect(result.code).toContain('onClick: fn()')
   })
 
   it('adds specifiers to a side-effect import of the module', async () => {

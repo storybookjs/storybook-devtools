@@ -294,6 +294,24 @@ function appendWithRegex(
 ): Pick<CsfWriteResult, 'code' | 'exportName'> {
   const { existingCode: code, desiredExportName, storyObjectSource } = request
 
+  // The splice adds a value import next to a type-only one of the same
+  // name, which declares it twice. Refuse instead of writing that file.
+  for (const { specifiers = [], defaultSpecifier, typeOnly } of request.requiredImports) {
+    if (typeOnly) continue
+    for (const name of [...specifiers, ...(defaultSpecifier ? [defaultSpecifier] : [])]) {
+      const typeImport = new RegExp(
+        `import\\s+type\\s+(?:${escapeRegex(name)}\\b|\\{[^}]*\\b${escapeRegex(name)}\\b)` +
+          `|\\btype\\s+${escapeRegex(name)}\\s*[,}]`,
+      )
+      if (typeImport.test(code)) {
+        throw new Error(
+          `Could not add the story to ${request.fileName}: the file imports \`${name}\` as a type, ` +
+            'and the story needs it as a value. Import it as a value and save the story again.',
+        )
+      }
+    }
+  }
+
   const taken = new Set<string>()
   const storyExportRegex = /export\s+const\s+(\w+)\s*[=:]/g
   let match

@@ -203,6 +203,23 @@ export async function loadCsfWriterSyntax(): Promise<CsfWriterSyntax> {
       ))
     }
 
+    // The type-only specifier `removeSpecifier` takes out to promote it. It
+    // is removed in the same commit as the value import that replaces it:
+    // a commit indexes the file, and a file that re-exports the type
+    // (`export type { fn }`) is not valid CSF without either import.
+    // Lookups until then leave it out, as if it were removed.
+    let promoted: { declaration: ESTree.ImportDeclaration; specifier: ImportSpecifierNode } | undefined
+    const specifiersOf = (declaration: ESTree.ImportDeclaration) =>
+      declaration.specifiers.filter(s => s !== promoted?.specifier)
+
+    const removePromoted = (
+      declaration: ESTree.ImportDeclaration,
+      kept: ImportSpecifierNode[],
+    ) => {
+      if (kept.length === 0) tools.removeStatement(editor, declaration)
+      else tools.setImportSpecifiers(editor, declaration, kept)
+    }
+
     // Each edit is committed before the next lookup, so every step reads the
     // file's imports as the previous step left them.
     return {
@@ -211,12 +228,14 @@ export async function loadCsfWriterSyntax(): Promise<CsfWriterSyntax> {
       exportStyle: () => detectExportStyle(tools, csf),
 
       importsFrom(source) {
-        return importsFrom(editor.program, source).map(declaration => {
+        return importsFrom(editor.program, source).flatMap(declaration => {
+          const kept = specifiersOf(declaration)
+          if (kept.length === 0 && declaration.specifiers.length > 0) return []
           const info: ImportDeclarationInfo = {
             typeOnly: declaration.importKind === 'type',
-            hasDefault: declaration.specifiers.some(s => s.type === 'ImportDefaultSpecifier'),
-            hasNamespace: declaration.specifiers.some(s => s.type === 'ImportNamespaceSpecifier'),
-            specifiers: declaration.specifiers.flatMap(specifier => {
+            hasDefault: kept.some(s => s.type === 'ImportDefaultSpecifier'),
+            hasNamespace: kept.some(s => s.type === 'ImportNamespaceSpecifier'),
+            specifiers: kept.flatMap(specifier => {
               if (specifier.type === 'ImportNamespaceSpecifier') return []
               const named = specifier.type === 'ImportSpecifier'
               const specifierInfo: ImportSpecifierInfo = {
@@ -232,43 +251,55 @@ export async function loadCsfWriterSyntax(): Promise<CsfWriterSyntax> {
             }),
           }
           declarations.set(info, declaration)
-          return info
+          return [info]
         })
       },
 
       // The writer only removes a type-only specifier, to promote it, and
-      // `CsfFile.removeImport` leaves those alone. The commit indexes the
-      // file, which fails when it re-exports the type (`export type { fn }`).
+      // `CsfFile.removeImport` leaves those alone. The removal waits for the
+      // value import that replaces it; see `promoted`.
       removeSpecifier(declarationInfo, specifierInfo) {
-        const declaration = nodeOf(declarations, declarationInfo)
-        const specifier = nodeOf(specifiers, specifierInfo)
-        const kept = declaration.specifiers.filter(s => s !== specifier)
-        if (kept.length === 0) {
-          tools.removeStatement(editor, declaration)
-        } else {
-          tools.setImportSpecifiers(editor, declaration, kept)
+        if (promoted) throw new Error('A promotion is already pending')
+        promoted = {
+          declaration: nodeOf(declarations, declarationInfo),
+          specifier: nodeOf(specifiers, specifierInfo),
         }
-        editor.commit()
       },
 
       addSpecifier(declarationInfo, imported, binding) {
         const target = nodeOf(declarations, declarationInfo)
-        if (!declarationInfo.typeOnly) return setImport(target.source.value, imported, binding)
-        tools.setImportSpecifiers(
-          editor,
-          target,
-          target.specifiers,
-          imported === 'default' ? { default: binding } : { named: [importName(imported, binding)] },
-        )
+        const added = imported === 'default'
+          ? { default: binding }
+          : { named: [importName(imported, binding)] }
+        if (!promoted) {
+          if (!declarationInfo.typeOnly) return setImport(target.source.value, imported, binding)
+          tools.setImportSpecifiers(editor, target, target.specifiers, added)
+          editor.commit()
+          return
+        }
+        const { declaration, specifier } = promoted
+        promoted = undefined
+        const kept = declaration.specifiers.filter(s => s !== specifier)
+        if (target === declaration) {
+          tools.setImportSpecifiers(editor, target, kept, added)
+        } else {
+          removePromoted(declaration, kept)
+          tools.setImportSpecifiers(editor, target, target.specifiers, added)
+        }
         editor.commit()
       },
 
       addImport(source, imported, binding, typeOnly) {
-        if (!typeOnly) return setImport(source, imported, binding)
+        if (!typeOnly && !promoted) return setImport(source, imported, binding)
+        if (promoted) {
+          const { declaration, specifier } = promoted
+          promoted = undefined
+          removePromoted(declaration, declaration.specifiers.filter(s => s !== specifier))
+        }
         const clause = imported === 'default' ? binding : `{ ${importName(imported, binding)} }`
         tools.insertAfterImports(
           editor,
-          `import type ${clause} from ${tools.printString(source, editor.quote)}${editor.semicolons ? ';' : ''}`,
+          `import ${typeOnly ? 'type ' : ''}${clause} from ${tools.printString(source, editor.quote)}${editor.semicolons ? ';' : ''}`,
         )
         editor.commit()
       },
@@ -280,6 +311,7 @@ export async function loadCsfWriterSyntax(): Promise<CsfWriterSyntax> {
 
       print(aliases) {
         if (!snippet) throw new Error('parseStory must run before print')
+        if (promoted) throw new Error('A type import was removed without its replacement')
         const story = snippet.rename(aliases).trim()
         const stories = csf.stories.length
 
