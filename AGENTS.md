@@ -200,10 +200,11 @@ live in `src/**/*-babel.ts` and
 `storybook/internal/csf-tools` has `parseModule`. `pnpm test` and
 `pnpm typecheck` cover the path of the installed `storybook`;
 `pnpm typecheck` skips the other path's files, and tests written for one
-path skip themselves on the other (`src/test-utils/csf-tools.ts`). To check
-the ESTree path before the dev dependency is a Storybook 11 with
-`parseModule`, install such a Storybook locally, run both, and restore
-`package.json` and `pnpm-lock.yaml`. The two writers differ only in a blank
+path skip themselves on the other (`src/test-utils/csf-tools.ts`). The
+`storybook` dev dependency is a Storybook 11 canary with `parseModule`, so
+CI checks the ESTree path. To check the Babel path, install
+`storybook@10.6.3` locally, run both, and restore `package.json` and
+`pnpm-lock.yaml`. The two writers differ only in a blank
 line recast adds before a new import; story-generator tests strip it with
 `withoutAddedImportGap` and check it against the installed path, so both
 paths share one snapshot each.
@@ -241,9 +242,12 @@ Run the broader test set too when the change touches more than one area.
 
 ### Storybook version
 
-Run validation against the Storybook 11 version pinned in the workspace
-(currently `11.0.0-alpha.1`), using `pnpm install --frozen-lockfile`.
-CI runs this same version without a version matrix or dependency re-pinning.
+Run validation against the Storybook versions pinned in the workspace,
+using `pnpm install --frozen-lockfile`: the playgrounds pin
+`11.0.0-alpha.1`, and the root `storybook` dev dependency, which the plugin
+source resolves, is the canary `https://pkg.pr.new/storybook@b26f35e`.
+CI runs these same versions without a version matrix or dependency
+re-pinning.
 
 The playgrounds' own Vitest story projects are not wired into
 `pnpm --filter <playground> test` (the config nests `test.test`, so Vitest

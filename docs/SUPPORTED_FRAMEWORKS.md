@@ -25,8 +25,11 @@ The shared browser suite exercises first-click highlighter activation and
 repeated close/reopen through the actual dock on all six playgrounds. A separate
 serial suite launches Storybook and verifies generated stories and previews on
 five hosts; React 18 intentionally tests the missing-config failure path.
-The playgrounds pin Storybook `11.0.0-alpha.1`; local validation and CI run
-the unit, browser, and Storybook suites against this locked version only.
+The playgrounds pin Storybook `11.0.0-alpha.1`, while the plugin's own
+`storybook` dev dependency is a canary of Storybook `next`
+(`https://pkg.pr.new/storybook@b26f35e`), whose csf-tools the plugin source
+uses in every playground. Local validation and CI run the unit, browser, and
+Storybook suites against these locked versions only.
 The declared peer range remains `>=10.6.0 || ^11.0.0-0`; Storybook 10 is not
 part of the ongoing test matrix.
 Story format: `playground/vue` uses CSF factories (`definePreview` in
