@@ -11,35 +11,63 @@
  * The tag attaches a non-enumerable symbol to the component function. The
  * runtime reads it off the live fiber tree via the React DevTools global hook.
  * The rendered tree is left completely untouched.
+ *
+ * Reading the module takes a parser, and Storybook's changed: Storybook 10
+ * parses with Babel; with storybookjs/storybook#36613 (Storybook 11) it
+ * parses with OXC into ESTree nodes, through `parseModule` in its
+ * csf-tools. `transform-babel.ts` and
+ * `transform-estree.ts` read the same facts from either AST; everything
+ * else here works on those facts and on the source text.
  */
 
-// @ts-nocheck
 import * as path from 'path'
-import type { types as T } from 'storybook/internal/babel'
 import type { TransformFunction, TransformOptions } from '../types'
 import { loadStorybookInternal } from '../../storybook-peer'
+import { babelModuleReader } from './transform-babel'
+import { estreeModuleReader } from './transform-estree'
 
-type BabelModule = typeof import('storybook/internal/babel')
-
-// Storybook's Babel re-exports, loaded on first use through the guarded
-// peer loader rather than a static import, so a missing or too-old
-// `storybook` fails with the peer requirement instead of a bare module
-// resolution error at host config load.
-let babelModule: BabelModule | undefined
-function babel(): BabelModule {
-  return (babelModule ??= loadStorybookInternal<BabelModule>('babel'))
+/** What the transform needs to know about a module. */
+export interface ModuleFacts {
+  /** The module's directive prologue holds `"use client"`. */
+  useClient: boolean
+  /** The module contains JSX. */
+  hasJsx: boolean
+  /** Top-level component declarations, by name. */
+  components: Set<string>
+  /** Every name the module exports, the default export's binding included. */
+  exportedNames: Set<string>
+  /** The binding the module exports as default, if it is a named one. */
+  defaultExportName: string | null
+  /** `file:line:column` of an anonymous default-exported function. */
+  anonymousDefaultLoc: string | null
+  /**
+   * PascalCase bindings assigned from a call that is not memo/forwardRef,
+   * likely an HOC the transform can't tag, with their `file:line:column`.
+   */
+  unsupportedHoc: Map<string, string>
 }
-const t = new Proxy({} as BabelModule['types'], {
-  get: (_target, key) =>
-    (babel().types as unknown as Record<PropertyKey, unknown>)[key],
-})
-const traverse: BabelModule['traverse'] = ((...args) =>
-  babel().traverse(...args)) as BabelModule['traverse']
-const generate: BabelModule['generate'] = ((...args) =>
-  babel().generate(...args)) as BabelModule['generate']
 
-const parse: BabelModule['parser']['parse'] = (...args) =>
-  babel().parser.parse(...args)
+/** Parses a module with one Storybook's parser and reads its facts. */
+export interface ModuleReader {
+  read(code: string, id: string): ModuleFacts
+}
+
+let reader: ModuleReader | undefined
+
+/**
+ * The reader for the installed Storybook: ESTree when its csf-tools have
+ * `parseModule`, Babel otherwise. Both readers are imported statically,
+ * since the bundler transform hooks are synchronous, and load nothing
+ * from `storybook` until they are called, so either imports safely on
+ * the other Storybook.
+ */
+function moduleReader(): ModuleReader {
+  return (reader ??=
+    typeof loadStorybookInternal<{ parseModule?: unknown }>('csf-tools').parseModule ===
+    'function'
+      ? estreeModuleReader
+      : babelModuleReader)
+}
 
 function createHash(data: string): string {
   let hash = 0
@@ -57,57 +85,6 @@ export const VIRTUAL_MODULE_ID = 'virtual:component-highlighter/runtime'
 const TAG_FN = '__chRegisterMeta'
 
 /**
- * Detect a module-level `"use client"` directive (the RSC client-boundary
- * marker). Babel collects leading directive prologues into
- * `program.directives`, so we read it from there rather than scanning text —
- * this naturally handles either quote style and ignores `"use client"`
- * strings that appear deeper in the module.
- */
-function hasUseClientDirective(ast: T.File): boolean {
-  return (ast.program.directives ?? []).some(
-    (d) => d.value?.value === 'use client',
-  )
-}
-
-function isComponentName(name: string | undefined | null): boolean {
-  return (
-    !!name &&
-    name[0] === name[0].toUpperCase() &&
-    name[0] !== name[0].toLowerCase()
-  )
-}
-
-function isMemoOrForwardRef(node: T.Expression | null | undefined): boolean {
-  if (!node || node.type !== 'CallExpression') return false
-  const callee = node.callee
-  // Bare form: memo(...) / forwardRef(...)
-  if (
-    callee.type === 'Identifier' &&
-    (callee.name === 'memo' || callee.name === 'forwardRef')
-  ) {
-    return true
-  }
-  // Member form: React.memo(...) / React.forwardRef(...)
-  if (
-    callee.type === 'MemberExpression' &&
-    callee.property.type === 'Identifier' &&
-    (callee.property.name === 'memo' || callee.property.name === 'forwardRef')
-  ) {
-    return true
-  }
-  return false
-}
-
-function isComponentInit(node: T.Expression | null | undefined): boolean {
-  if (!node) return false
-  return (
-    node.type === 'ArrowFunctionExpression' ||
-    node.type === 'FunctionExpression' ||
-    isMemoOrForwardRef(node)
-  )
-}
-
-/**
  * Transform React JSX/TSX files: collect exported component bindings and
  * append metadata tags. The component declarations themselves are never
  * modified.
@@ -118,15 +95,7 @@ export const transform: TransformFunction = (
   options: TransformOptions = {},
 ): string | undefined => {
   try {
-    const ast = parse(code, {
-      sourceType: 'module',
-      plugins: [
-        'typescript',
-        'jsx',
-        ['decorators', { decoratorsBeforeExport: true }],
-      ],
-      sourceFilename: id,
-    })
+    const facts = moduleReader().read(code, id)
 
     // RSC gate: in `rsc` mode, only client components (modules with a
     // `"use client"` directive) are instrumented. Server components never
@@ -134,111 +103,15 @@ export const transform: TransformFunction = (
     // client runtime into the server module graph. In a plain SPA (rsc off)
     // there is no directive but every component is a client component, so we
     // tag everything — hence this gate is opt-in.
-    if (options.rsc && !hasUseClientDirective(ast)) {
+    if (options.rsc && !facts.useClient) {
       return undefined
     }
 
-    let hasJsx = false
-    traverse(ast, {
-      JSXElement() {
-        hasJsx = true
-      },
-      JSXFragment() {
-        hasJsx = true
-      },
-    })
-
-    // Top-level component declarations by name, the set of names that are
-    // exported (inline, via specifier, or as default), and the default name.
-    const topLevelComponents = new Set<string>()
-    const exportedNames = new Set<string>()
-    let defaultExportName: string | null = null
-
-    // Non-fatal detection gaps to surface as diagnostics.
-    let anonDefaultLoc: string | null = null
-    const unsupportedHoc = new Map<string, string>() // name -> file:line:col
-    const nodeLoc = (node: T.Node | null | undefined): string =>
-      node?.loc
-        ? `${id}:${node.loc.start.line}:${node.loc.start.column + 1}`
-        : id
-
-    const considerFunction = (decl: T.FunctionDeclaration) => {
-      const name = decl.id?.name
-      if (name && isComponentName(name)) topLevelComponents.add(name)
-    }
-    const considerVariable = (varDecl: T.VariableDeclaration) => {
-      for (const d of varDecl.declarations) {
-        if (d.id.type !== 'Identifier' || !isComponentName(d.id.name)) continue
-        if (isComponentInit(d.init)) {
-          topLevelComponents.add(d.id.name)
-        } else if (
-          d.init &&
-          d.init.type === 'CallExpression' &&
-          !isMemoOrForwardRef(d.init)
-        ) {
-          // PascalCase `X = someCall(...)` that isn't memo/forwardRef — likely
-          // an unrecognized HOC wrapper we can't statically tag.
-          unsupportedHoc.set(d.id.name, nodeLoc(d.init))
-        }
-      }
-    }
-    const considerClass = (decl: T.ClassDeclaration) => {
-      const name = decl.id?.name
-      if (name && isComponentName(name)) topLevelComponents.add(name)
-    }
-
-    for (const stmt of ast.program.body) {
-      if (stmt.type === 'FunctionDeclaration') {
-        considerFunction(stmt)
-      } else if (stmt.type === 'VariableDeclaration') {
-        considerVariable(stmt)
-      } else if (stmt.type === 'ClassDeclaration') {
-        considerClass(stmt)
-      } else if (stmt.type === 'ExportNamedDeclaration') {
-        if (stmt.declaration?.type === 'FunctionDeclaration') {
-          considerFunction(stmt.declaration)
-          if (stmt.declaration.id) exportedNames.add(stmt.declaration.id.name)
-        } else if (stmt.declaration?.type === 'ClassDeclaration') {
-          considerClass(stmt.declaration)
-          if (stmt.declaration.id) exportedNames.add(stmt.declaration.id.name)
-        } else if (stmt.declaration?.type === 'VariableDeclaration') {
-          considerVariable(stmt.declaration)
-          for (const d of stmt.declaration.declarations) {
-            if (d.id.type === 'Identifier') exportedNames.add(d.id.name)
-          }
-        }
-        for (const spec of stmt.specifiers ?? []) {
-          if (spec.type === 'ExportSpecifier' && spec.local) {
-            exportedNames.add(spec.local.name)
-          }
-        }
-      } else if (stmt.type === 'ExportDefaultDeclaration') {
-        const decl = stmt.declaration
-        if (decl.type === 'FunctionDeclaration' && decl.id) {
-          considerFunction(decl)
-          defaultExportName = decl.id.name
-        } else if (decl.type === 'ClassDeclaration' && decl.id) {
-          considerClass(decl)
-          defaultExportName = decl.id.name
-        } else if (decl.type === 'Identifier') {
-          defaultExportName = decl.name
-        } else if (
-          decl.type === 'ArrowFunctionExpression' ||
-          decl.type === 'FunctionExpression'
-        ) {
-          // `export default () => …` / `export default function () {}` —
-          // anonymous, no stable binding to tag.
-          anonDefaultLoc = nodeLoc(decl)
-        }
-        // Anonymous default expressions are skipped: no stable binding to tag.
-      }
-    }
-
-    if (defaultExportName) exportedNames.add(defaultExportName)
+    const { hasJsx, exportedNames, defaultExportName } = facts
 
     // name -> isDefaultExport
     const componentBindings = new Map<string, boolean>()
-    for (const name of topLevelComponents) {
+    for (const name of facts.components) {
       if (exportedNames.has(name)) {
         componentBindings.set(name, name === defaultExportName)
       }
@@ -248,17 +121,17 @@ export const transform: TransformFunction = (
     // actually render JSX (component modules), so unrelated PascalCase factory
     // exports in non-component files aren't flagged.
     if (hasJsx && options.onIssue) {
-      if (anonDefaultLoc) {
+      if (facts.anonymousDefaultLoc) {
         options.onIssue({
           code: 'unsupported-pattern',
           file: id,
           name: 'default',
-          loc: anonDefaultLoc,
+          loc: facts.anonymousDefaultLoc,
           detail:
             'Anonymous default export can’t be detected for story generation. Give it a name, e.g. `function Foo() {}; export default Foo`.',
         })
       }
-      for (const [name, loc] of unsupportedHoc) {
+      for (const [name, loc] of facts.unsupportedHoc) {
         if (exportedNames.has(name) && !componentBindings.has(name)) {
           options.onIssue({
             code: 'unsupported-pattern',
@@ -277,52 +150,27 @@ export const transform: TransformFunction = (
 
     const relativeFilePath = path.relative(process.cwd(), id)
 
-    // import { __chRegisterMeta } from 'virtual:...'
-    ast.program.body.unshift(
-      t.importDeclaration(
-        [t.importSpecifier(t.identifier(TAG_FN), t.identifier(TAG_FN))],
-        t.stringLiteral(VIRTUAL_MODULE_ID),
-      ),
-    )
-
-    // Append tag statements at the end so const bindings are initialized.
+    // Append the import and the tag statements after the module body: the
+    // import is hoisted, the tags run once const bindings are initialized,
+    // and the module's own code keeps its text and line numbers.
+    //   import { __chRegisterMeta } from 'virtual:...'
+    //   __chRegisterMeta(Button, { componentName: "Button", ... })
+    const appended = [
+      `import { ${TAG_FN} } from ${JSON.stringify(VIRTUAL_MODULE_ID)};`,
+    ]
     for (const [name, isDefaultExport] of componentBindings) {
       const sourceId = createHash(id + ':' + name)
-      const meta = t.objectExpression([
-        t.objectProperty(
-          t.identifier('componentName'),
-          t.stringLiteral(name),
-        ),
-        t.objectProperty(t.identifier('filePath'), t.stringLiteral(id)),
-        t.objectProperty(
-          t.identifier('relativeFilePath'),
-          t.stringLiteral(relativeFilePath),
-        ),
-        t.objectProperty(
-          t.identifier('sourceId'),
-          t.stringLiteral(sourceId),
-        ),
-        t.objectProperty(
-          t.identifier('isDefaultExport'),
-          t.booleanLiteral(isDefaultExport),
-        ),
-      ])
-      ast.program.body.push(
-        t.expressionStatement(
-          t.callExpression(t.identifier(TAG_FN), [
-            t.identifier(name),
-            meta,
-          ]),
-        ),
-      )
+      const meta = [
+        `componentName: ${JSON.stringify(name)}`,
+        `filePath: ${JSON.stringify(id)}`,
+        `relativeFilePath: ${JSON.stringify(relativeFilePath)}`,
+        `sourceId: ${JSON.stringify(sourceId)}`,
+        `isDefaultExport: ${isDefaultExport}`,
+      ]
+      appended.push(`${TAG_FN}(${name}, {\n  ${meta.join(',\n  ')},\n});`)
     }
 
-    const output = generate(ast, {
-      sourceMaps: true,
-      sourceFileName: id,
-    })
-
-    return output.code
+    return `${code}${code.endsWith('\n') ? '' : '\n'}${appended.join('\n')}\n`
   } catch (error) {
     const detail = (error as { message?: string })?.message || String(error)
     // Prefer a structured diagnostic (the plugin routes it to ctx.diagnostics);

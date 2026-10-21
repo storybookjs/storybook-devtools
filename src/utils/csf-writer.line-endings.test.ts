@@ -1,17 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
-
-// Recast's default line terminator is `os.EOL` (CRLF on Windows) on
-// Storybook 10 and always LF on Storybook 11. Forcing CRLF as the printer's
-// default reproduces the former on any host.
-vi.mock('storybook/internal/csf-tools', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('storybook/internal/csf-tools')>()
-  return {
-    ...actual,
-    printCsf: (csf: Parameters<typeof actual.printCsf>[0], options = {}) =>
-      actual.printCsf(csf, { lineTerminator: '\r\n', ...options }),
-  }
-})
-
+import { describe, expect, it } from 'vitest'
 import { writeStoryIntoCsf } from './csf-writer'
 
 const csf3 = `import type { Meta, StoryObj } from '@storybook/react-vite';
@@ -39,8 +26,19 @@ const request = {
 }
 
 describe('writeStoryIntoCsf line endings', () => {
-  it('keeps LF when the printer would default to CRLF', async () => {
+  it('keeps LF', async () => {
     const result = await writeStoryIntoCsf({ ...request, existingCode: csf3 })
+
+    expect(result.fallbackReason).toBeUndefined()
+    expect(result.code).toContain('export const Primary: Story = {')
+    expect(result.code).not.toContain('\r')
+  })
+
+  // csf-tools ends every line like the file's first one; the writer
+  // follows the majority instead.
+  it('keeps LF when only the first line ends in CRLF', async () => {
+    const existingCode = csf3.replace('\n', '\r\n')
+    const result = await writeStoryIntoCsf({ ...request, existingCode })
 
     expect(result.fallbackReason).toBeUndefined()
     expect(result.code).toContain('export const Primary: Story = {')

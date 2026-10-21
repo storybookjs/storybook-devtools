@@ -14,6 +14,15 @@ describe('storybook peer check', () => {
     expect(parseVersionFloor(undefined)).toBeUndefined()
   })
 
+  it('keeps the prerelease of a floor', () => {
+    expect(parseVersionFloor('>=11.0.0-alpha.7')).toBe('11.0.0-alpha.7')
+    expect(storybookPeerProblem('11.0.0-alpha.6', '>=11.0.0-alpha.7', 'pkg')).toContain(
+      'Upgrade storybook to 11.0.0-alpha.7 or newer',
+    )
+    expect(storybookPeerProblem('11.0.0-alpha.7', '>=11.0.0-alpha.7', 'pkg')).toBeNull()
+    expect(storybookPeerProblem('11.0.0', '>=11.0.0-alpha.7', 'pkg')).toBeNull()
+  })
+
   it('reads the floor from the declared multi-clause range', () => {
     expect(parseVersionFloor('>=10.6.0 || ^11.0.0-0')).toBe('10.6.0')
   })
@@ -71,10 +80,10 @@ describe('storybook peer check', () => {
 
   it('passes against this repo and loads an internal subpath synchronously', () => {
     expect(() => assertStorybookPeer()).not.toThrow()
-    const babel = loadStorybookInternal<{ types: { isIdentifier: unknown } }>(
-      'babel',
+    const csfTools = loadStorybookInternal<{ loadCsf: unknown }>(
+      'csf-tools',
     )
-    expect(typeof babel.types.isIdentifier).toBe('function')
-    expect(loadStorybookInternal('babel')).toBe(babel)
+    expect(typeof csfTools.loadCsf).toBe('function')
+    expect(loadStorybookInternal('csf-tools')).toBe(csfTools)
   })
 })

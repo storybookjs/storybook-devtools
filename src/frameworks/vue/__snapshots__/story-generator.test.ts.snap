@@ -3,7 +3,6 @@
 exports[`vue generateStory — append to existing file > adds the fn import when the file has no storybook/test import 1`] = `
 "import type { Meta, StoryObj } from '@storybook/vue3-vite';
 import BaseButton from './BaseButton.vue';
-
 import { fn } from 'storybook/test';
 
 const meta = {
@@ -28,7 +27,6 @@ export const Default2: Story = {
 exports[`vue generateStory — append to existing file > appends a slot render template and its component import 1`] = `
 "import type { Meta, StoryObj } from '@storybook/vue3-vite';
 import BaseButton from './BaseButton.vue';
-
 import BaseIcon from './BaseIcon.vue';
 
 const meta = {

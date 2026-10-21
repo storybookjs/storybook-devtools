@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { babelParse } from 'storybook/internal/babel'
+import { parseWithStorybook } from '../test-utils/csf-tools'
 import { writeStoryIntoCsf } from './csf-writer'
 
 const story = `{
@@ -75,6 +75,19 @@ export const Default = { args: { label: 'Hello' } };
     expect(result.code).toContain("import { Button } from './Button';")
   })
 
+  it('refuses a fallback splice that would import a type-only name again', async () => {
+    const existingCode = `import type { fn } from 'storybook/test';
+
+export const Default = { args: { label: 'Hello' } };
+`
+    await expect(writeStoryIntoCsf({
+      ...base,
+      existingCode,
+      storyObjectSource: '{ args: { onClick: fn() } }',
+      requiredImports: [{ source: 'storybook/test', specifiers: ['fn'] }],
+    })).rejects.toThrow('imports `fn` as a type')
+  })
+
   it('dedupes in the fallback path as well', async () => {
     const existingCode = `import { Button } from './Button';
 
@@ -99,7 +112,7 @@ export const Primary = { args: { label: 'Hello' } };
     })
 
     expect(result.fallbackReason).toBeUndefined()
-    expect(() => babelParse(result.code)).not.toThrow()
+    expect(() => parseWithStorybook(result.code, base.fileName)).not.toThrow()
     expect(result.code).toContain("import { fn } from 'storybook/test';")
   })
 
@@ -131,7 +144,7 @@ export const Primary = { args: { label: 'Hello' } };
       requiredImports: [{ source: 'storybook/test', specifiers: ['fn'] }],
     })
     expect(result.fallbackReason).toBeUndefined()
-    expect(() => babelParse(result.code)).not.toThrow()
+    expect(() => parseWithStorybook(result.code, base.fileName)).not.toThrow()
     expect(result.code).toMatch(/fn as fn2/)
     expect(result.code).toContain('onClick: fn2()')
   })
@@ -144,7 +157,7 @@ export const Primary = { args: { label: 'Hello' } };
       requiredImports: [{ source: './Button', defaultSpecifier: 'Button' }],
     })
     expect(result.fallbackReason).toBeUndefined()
-    expect(() => babelParse(result.code)).not.toThrow()
+    expect(() => parseWithStorybook(result.code, base.fileName)).not.toThrow()
     expect(result.code).toContain('render: () => ExistingButton')
   })
 
@@ -154,7 +167,7 @@ export const Primary = { args: { label: 'Hello' } };
       existingCode: csf3 + '\nconst { Primary } = { Primary: 1 };',
     })
     expect(result.exportName).toBe('Primary2')
-    expect(() => babelParse(result.code)).not.toThrow()
+    expect(() => parseWithStorybook(result.code, base.fileName)).not.toThrow()
   })
 
   it('avoids imported aliases shadowed by locals in the new play function', async () => {
@@ -166,7 +179,7 @@ export const Primary = { args: { label: 'Hello' } };
     })
     expect(result.fallbackReason).toBeUndefined()
     expect(result.code).toContain('const canvas = within(canvasElement)')
-    expect(() => babelParse(result.code)).not.toThrow()
+    expect(() => parseWithStorybook(result.code, base.fileName)).not.toThrow()
   })
 
   it('reserves component imports before choosing the story export name', async () => {
@@ -180,6 +193,83 @@ export const Primary = { args: { label: 'Hello' } };
     expect(result.exportName).toBe('Button2')
     expect(result.code).toContain('Button: ExistingButton')
     expect(result.fallbackReason).toBeUndefined()
+  })
+
+  it('renames references in JSX, closing tags and member tags included', async () => {
+    const result = await writeStoryIntoCsf({
+      ...base,
+      existingCode: csf3.replace("import { Button } from './Button';", "import Btn from './Button';"),
+      storyObjectSource: '{ render: () => <Button><Button.Icon /></Button> }',
+      requiredImports: [{ source: './Button', defaultSpecifier: 'Button' }],
+    })
+    expect(result.fallbackReason).toBeUndefined()
+    expect(result.code).toContain('render: () => <Btn><Btn.Icon /></Btn>')
+  })
+
+  it('promotes an inline type specifier within its own import', async () => {
+    const result = await writeStoryIntoCsf({
+      ...base,
+      existingCode: csf3.replace(
+        "import { Button } from './Button';",
+        "import { Button } from './Button';\nimport { type fn, within } from 'storybook/test';",
+      ),
+      storyObjectSource: '{ args: { onClick: fn() } }',
+      requiredImports: [{ source: 'storybook/test', specifiers: ['fn'] }],
+    })
+    expect(result.fallbackReason).toBeUndefined()
+    expect(result.code).toContain("import { within, fn } from 'storybook/test';")
+    expect(result.code).not.toContain('type fn')
+  })
+
+  it('promotes a type import that the file also re-exports as a type', async () => {
+    const result = await writeStoryIntoCsf({
+      ...base,
+      existingCode: csf3.replace(
+        "import { Button } from './Button';",
+        "import { Button } from './Button';\nimport type { fn } from 'storybook/test';\nexport type { fn };",
+      ),
+      storyObjectSource: '{ args: { onClick: fn() } }',
+      requiredImports: [{ source: 'storybook/test', specifiers: ['fn'] }],
+    })
+    expect(result.fallbackReason).toBeUndefined()
+    expect(() => parseWithStorybook(result.code, base.fileName)).not.toThrow()
+    expect(result.code.match(/import (type )?\{ fn \}/g)).toEqual(['import { fn }'])
+    expect(result.code).toContain('export type { fn };')
+    expect(result.code).toContain('onClick: fn()')
+  })
+
+  it('adds specifiers to a side-effect import of the module', async () => {
+    const result = await writeStoryIntoCsf({
+      ...base,
+      existingCode: csf3.replace(
+        "import { Button } from './Button';",
+        "import { Button } from './Button';\nimport 'storybook/test';",
+      ),
+      requiredImports: [{ source: 'storybook/test', specifiers: ['fn'] }],
+    })
+    expect(result.fallbackReason).toBeUndefined()
+    expect(result.code).toContain("import { fn } from 'storybook/test';")
+    expect(result.code.match(/storybook\/test/g)).toHaveLength(1)
+  })
+
+  it('quotes an added import like the rest of the file', async () => {
+    const result = await writeStoryIntoCsf({
+      ...base,
+      existingCode: csf3.replaceAll("'", '"'),
+      requiredImports: [{ source: 'storybook/test', specifiers: ['fn'] }],
+    })
+    expect(result.fallbackReason).toBeUndefined()
+    expect(result.code).toContain('import { fn } from "storybook/test";')
+  })
+
+  it('appends after a trailing comment and to a file without a final newline', async () => {
+    const result = await writeStoryIntoCsf({
+      ...base,
+      existingCode: `${csf3}// trailing comment`,
+    })
+    expect(result.fallbackReason).toBeUndefined()
+    expect(result.code).toContain('// trailing comment\n\nexport const Primary: Story = {')
+    expect(result.code.endsWith('};\n')).toBe(true)
   })
 
   it('round-trips CRLF line endings, including the appended story', async () => {
@@ -213,7 +303,7 @@ export const Default = meta.story({});
       expect(result.code).toContain('export const Primary = meta.story({')
       expect(result.code).not.toContain(': Story')
       expect(result.code).not.toMatch(/export const Primary = \{/)
-      expect(() => babelParse(result.code)).not.toThrow()
+      expect(() => parseWithStorybook(result.code, base.fileName)).not.toThrow()
     })
 
     it("uses the file's own meta variable name", async () => {
@@ -224,6 +314,29 @@ export const Default = meta.story({});
 
       expect(result.fallbackReason).toBeUndefined()
       expect(result.code).toContain('export const Primary = buttonMeta.story({')
+    })
+
+    it('appends a meta.story export to a factory file without stories', async () => {
+      const result = await writeStoryIntoCsf({
+        ...base,
+        existingCode: factory.replace('export const Default = meta.story({});\n', ''),
+      })
+
+      expect(result.fallbackReason).toBeUndefined()
+      expect(result.code).toContain('export const Primary = meta.story({')
+    })
+
+    it('finds the meta of a factory whose configuration is not an object literal', async () => {
+      const result = await writeStoryIntoCsf({
+        ...base,
+        existingCode: factory.replace(
+          'const meta = preview.meta({\n  component: Button,\n});',
+          'const config = { component: Button };\nconst meta = preview.meta(config);',
+        ),
+      })
+
+      expect(result.code).toContain('export const Primary = meta.story({')
+      expect(() => parseWithStorybook(result.code, base.fileName)).not.toThrow()
     })
 
     it('handles preview.type<...>().meta(...)', async () => {

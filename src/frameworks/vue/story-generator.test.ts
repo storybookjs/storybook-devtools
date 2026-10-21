@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { csfToolsGeneration, withoutAddedImportGap } from '../../test-utils/csf-tools'
 import { generateStory } from './story-generator'
 
 const meta = {
@@ -93,7 +94,9 @@ describe('vue generateStory — append to existing file', () => {
       existingContent: csf3,
     })
 
-    expect(result.content).toMatchSnapshot()
+    const { code, gap } = withoutAddedImportGap(result.content)
+    expect(gap).toBe(csfToolsGeneration === 'babel')
+    expect(code).toMatchSnapshot()
   })
 
   it('merges play imports into an existing storybook/test import', async () => {
@@ -133,7 +136,9 @@ describe('vue generateStory — append to existing file', () => {
       existingContent: csf3,
     })
 
-    expect(result.content).toMatchSnapshot()
+    const { code, gap } = withoutAddedImportGap(result.content)
+    expect(gap).toBe(csfToolsGeneration === 'babel')
+    expect(code).toMatchSnapshot()
   })
 
   it('preserves leading comments, blank lines and single quotes', async () => {

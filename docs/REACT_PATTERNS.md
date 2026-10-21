@@ -2,7 +2,9 @@
 
 What the component detector recognizes, why, and the documented limits.
 
-Detection is non-intrusive: a Babel pass tags exported component **bindings**
+Detection is non-intrusive: the transform parses each module with
+Storybook's parser (Babel on Storybook 10, `parseModule` from
+`storybook/internal/csf-tools` with storybookjs/storybook#36613) and tags exported component **bindings**
 with a metadata symbol (`__chRegisterMeta`), and the runtime reads that symbol
 off the live React fiber tree. So a pattern is "supported" iff the transform
 can find a **stable, exported, statically-named binding** to tag.
@@ -134,7 +136,9 @@ componentHighlighter({ rsc: true }) // e.g. TanStack Start
 | `rsc: false` (default, SPA) | Every matching module is instrumented. A plain SPA has no `"use client"` directive yet every component runs on the client, so gating would be wrong. |
 | `rsc: true` (RSC frameworks) | Only modules declaring a leading `"use client"` directive are instrumented. Server components (no directive) are returned untouched — no tag, no runtime import. |
 
-The directive is read from Babel's `program.directives` (handles either quote
+The directive is read from the parser's directive prologue (Babel's
+`program.directives`, or the leading statements ESTree marks with
+`directive`; handles either quote
 style; a `"use client"` string elsewhere in the module does not count). The
 gate is covered by `src/frameworks/react/transform.test.ts` ("RSC mode"):
 client modules are tagged, server modules (no directive) are returned

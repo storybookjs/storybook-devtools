@@ -192,6 +192,24 @@ pnpm exec playwright test
 Build before tests: runtime-helper tests and Next/Rsbuild load `dist`.
 Do not build concurrently with tests; the build clears that directory.
 
+The React transform and the story writer read syntax through Storybook,
+which parses with Babel on Storybook 10 (and 11 prereleases without
+storybookjs/storybook#36613) and into ESTree nodes with #36613. Those reads
+live in `src/**/*-babel.ts` and
+`src/**/*-estree.ts`, picked at runtime by whether
+`storybook/internal/csf-tools` has `parseModule`. `pnpm test` and
+`pnpm typecheck` cover the path of the installed `storybook`;
+`pnpm typecheck` skips the other path's files, and tests written for one
+path skip themselves on the other (`src/test-utils/csf-tools.ts`). The
+`storybook` dev dependency is `10.6.3`, so CI checks the Babel path. To
+check the ESTree path, install a Storybook with `parseModule` locally
+(`pnpm add -D storybook@https://pkg.pr.new/storybook@b26f35e`, a canary of
+Storybook `next`), run both, and restore `package.json` and
+`pnpm-lock.yaml`. The two writers differ only in a blank
+line recast adds before a new import; story-generator tests strip it with
+`withoutAddedImportGap` and check it against the installed path, so both
+paths share one snapshot each.
+
 For Storybook peer, indexing, generation, or launcher changes, also run:
 
 ```bash
@@ -225,9 +243,12 @@ Run the broader test set too when the change touches more than one area.
 
 ### Storybook version
 
-Run validation against the Storybook 11 version pinned in the workspace
-(currently `11.0.0-alpha.1`), using `pnpm install --frozen-lockfile`.
-CI runs this same version without a version matrix or dependency re-pinning.
+Run validation against the Storybook versions pinned in the workspace,
+using `pnpm install --frozen-lockfile`: the playgrounds pin
+`11.0.0-alpha.1`, and the root `storybook` dev dependency, which the plugin
+source resolves, is `10.6.3`.
+CI runs these same versions without a version matrix or dependency
+re-pinning.
 
 The playgrounds' own Vitest story projects are not wired into
 `pnpm --filter <playground> test` (the config nests `test.test`, so Vitest

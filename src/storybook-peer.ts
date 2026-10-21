@@ -6,7 +6,7 @@
  * any module body runs, so a missing or too-old `storybook` would surface as
  * a bare module-resolution error naming an internal subpath instead of the
  * peer requirement. Loading is synchronous (`createRequire`) because the
- * bundler transform hooks that need Babel have no async entry point; Node's
+ * bundler transform hooks that parse with csf-tools have no async entry point; Node's
  * `require()` loads Storybook's ESM `dist` builds directly.
  *
  * Node-only: `createRequire` has no browser equivalent, so modules shared
@@ -24,9 +24,12 @@ interface OwnPackageJson {
   peerDependencies?: Record<string, string>
 }
 
-/** Parses the `>=x.y.z` floor of this package's `storybook` peer range. */
+/**
+ * Parses the `>=x.y.z` floor of this package's `storybook` peer range,
+ * prerelease included: `11.0.0-alpha.7` from `>=11.0.0-alpha.7`.
+ */
 export function parseVersionFloor(range: string | undefined): string | undefined {
-  const match = range?.match(/>=\s*(\d+\.\d+\.\d+)/)
+  const match = range?.match(/>=\s*(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)/)
   return match?.[1]
 }
 
