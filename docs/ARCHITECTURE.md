@@ -246,8 +246,8 @@ no equivalent, since its own `save-story` flow re-serialises args that were
 already typed rather than arbitrary runtime values. **File mutation** —
 appending the rendered export to a file that already exists — runs through
 `src/utils/csf-writer.ts`. `loadCsf().parse()` validates the file. The
-export name is deduped against `_storyExports` and every other top-level
-name the file declares or exports. Import merging matches exported symbols,
+export name is deduped against every top-level name the file declares or
+exports, its stories included. Import merging matches exported symbols,
 reuses aliases, promotes type-only bindings when a value is needed, and
 allocates free names for collisions. Only references in the appended
 snippet are rewritten, skipping names a local shadows.
@@ -262,14 +262,21 @@ lazily:
   the file with `printCsf`. Recast reuses each untouched node's original
   source, so comments, quote style and formatting elsewhere in the file
   survive.
-- `csf-writer-estree.ts` (ESTree csf-tools, #36613) makes text edits in a
-  `SourceEditor` of the file with the csf-tools import helpers:
-  `setImportSpecifiers` extends a matching `ImportDeclaration`,
-  `insertAfterImports` adds a new one, and `removeStatement` drops an
-  emptied one. Its intermediate commits only parse the file again and do
-  not index it as CSF. The snippet is parsed in its own `SourceEditor`,
-  whose scope analysis finds the references to rename. The story goes
-  after everything else in the file, a blank line apart.
+- `csf-writer-estree.ts` (ESTree csf-tools, #36613) makes text edits
+  through the `CsfFile`'s own `editor`. `CsfFile.setImport` adds a value
+  import, into an existing import of the module when one can take it;
+  `setImportSpecifiers` and `insertAfterImports` add a type-only one, and
+  `removeStatement` drops an emptied one. Top-level names come from the
+  editor's scope analysis (`scopes.program.bindings` and
+  `scopes.tsDeclarationNames`), plus the names of `export { … }`
+  specifiers. Every commit parses and indexes the file again, so an edit
+  that leaves invalid CSF throws and the writer falls back to the text
+  splice. One case does so for now: promoting a type import the file also
+  re-exports (`export type { fn }`). Removing the type import commits, and
+  the CSF index rejects the re-export without it. The snippet is
+  parsed in its own `SourceEditor`, whose scope analysis finds the
+  references to rename. The story goes after everything else in the file,
+  a blank line apart.
 
 The two differ in one visible way: recast puts a blank line before an
 added import, the text edits do not.
@@ -302,8 +309,13 @@ extension (always `./`- or `../`-prefixed, unlike Storybook's own, which
 yields a bare `.storybook/preview` for a story next to the config dir). It
 must end in `/preview`, which `CsfFile` requires to accept
 `preview.meta(...)`. An *append* ignores the project's preview and follows
-the file (`csf3Style` of the `StoryFileEditor`): `CsfFile._metaIsFactory`
-/ `_metaVariableName` give `<metaVar>.story({…})`; a CSF3 file reuses its
+the file (`exportStyle` of the `StoryFileEditor`): a factory file gets
+`<metaVar>.story({…})`. The Babel editor reads the meta variable from
+`CsfFile._metaVariableName`; csf-tools have no public name for it, so the
+ESTree editor reads it from the first `metaVar.story()` story, or, in a
+file without stories, from the variable the `.meta()` call around the
+meta's object initializes. It checks that the appended export was indexed
+as a story and falls back to the text splice otherwise. A CSF3 file reuses its
 first story's `: Type` annotation or `satisfies` clause, else the `Story`
 alias if the file declares one, else no annotation. Mixing formats makes
 `CsfFile` throw `MixedFactoryError`, so the text fallback also detects a

@@ -24,6 +24,7 @@ import type {
 import type { ExportStyle } from './story-generator'
 
 type BabelTypes = typeof t
+type BabelModule = typeof import('storybook/internal/babel')
 
 /** Pick the quote style recast should use for nodes it has to print fresh. */
 function detectQuoteStyle(code: string): 'single' | 'double' {
@@ -117,10 +118,15 @@ function insertImport(
   program.body.splice(lastImport + 1, 0, declaration)
 }
 
+// A variable, not a literal: a bundler that builds the plugin from source,
+// such as Vite bundling a playground's config, resolves a literal `import()`
+// up front and fails on a Storybook without this subpath.
+const BABEL_ENTRY = 'storybook/internal/babel'
+
 export async function loadCsfWriterSyntax(): Promise<CsfWriterSyntax> {
   const [{ printCsf }, { babelParse, types: t, traverse }] = await Promise.all([
     import(/* webpackIgnore: true */ 'storybook/internal/csf-tools'),
-    import(/* webpackIgnore: true */ 'storybook/internal/babel'),
+    import(/* webpackIgnore: true */ /* @vite-ignore */ BABEL_ENTRY) as Promise<BabelModule>,
   ])
 
   function open(
@@ -143,7 +149,9 @@ export async function loadCsfWriterSyntax(): Promise<CsfWriterSyntax> {
     return {
       topLevelNames: () => collectTopLevelBindings(t, program),
 
-      csf3Style: () => detectCsf3Style(t, csf, existingCode),
+      exportStyle: () => csf._metaIsFactory
+        ? { kind: 'factory', metaName: csf._metaVariableName ?? 'meta' }
+        : detectCsf3Style(t, csf, existingCode),
 
       importsFrom(source) {
         return program.body

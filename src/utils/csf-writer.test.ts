@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseWithStorybook } from '../test-utils/csf-tools'
+import { csfToolsGeneration, parseWithStorybook } from '../test-utils/csf-tools'
 import { writeStoryIntoCsf } from './csf-writer'
 
 const story = `{
@@ -218,6 +218,14 @@ export const Primary = { args: { label: 'Hello' } };
       storyObjectSource: '{ args: { onClick: fn() } }',
       requiredImports: [{ source: 'storybook/test', specifiers: ['fn'] }],
     })
+    if (csfToolsGeneration === 'estree') {
+      // Not yet on the ESTree path: removing `import type { fn }` commits,
+      // the commit indexes the file, and the CSF index rejects
+      // `export type { fn }` without its import. csf-tools would have to
+      // index once after `CsfFile.setImport` has promoted the binding.
+      expect(result.fallbackReason).toContain("Export 'fn' is not defined")
+      return
+    }
     expect(result.fallbackReason).toBeUndefined()
     expect(result.code).toContain("import { fn } from 'storybook/test';")
     expect(result.code).not.toContain('import type { fn }')
@@ -299,6 +307,29 @@ export const Default = meta.story({});
 
       expect(result.fallbackReason).toBeUndefined()
       expect(result.code).toContain('export const Primary = buttonMeta.story({')
+    })
+
+    it('appends a meta.story export to a factory file without stories', async () => {
+      const result = await writeStoryIntoCsf({
+        ...base,
+        existingCode: factory.replace('export const Default = meta.story({});\n', ''),
+      })
+
+      expect(result.fallbackReason).toBeUndefined()
+      expect(result.code).toContain('export const Primary = meta.story({')
+    })
+
+    it('finds the meta of a factory whose configuration is not an object literal', async () => {
+      const result = await writeStoryIntoCsf({
+        ...base,
+        existingCode: factory.replace(
+          'const meta = preview.meta({\n  component: Button,\n});',
+          'const config = { component: Button };\nconst meta = preview.meta(config);',
+        ),
+      })
+
+      expect(result.code).toContain('export const Primary = meta.story({')
+      expect(() => parseWithStorybook(result.code, base.fileName)).not.toThrow()
     })
 
     it('handles preview.type<...>().meta(...)', async () => {

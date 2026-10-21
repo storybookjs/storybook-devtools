@@ -14,9 +14,9 @@
  * `story-generator.ts`: csf-tools has no equivalent, its `save-story` flow
  * serialises already-typed args rather than arbitrary runtime values.
  *
- * `loadCsf().parse()` validates the file and tells a factory file from a
- * CSF3 one on every supported Storybook. Reading and editing the file's
- * syntax differs: Storybook 10 (and 11 prereleases without
+ * `loadCsf().parse()` validates the file on every supported Storybook.
+ * Reading the file's syntax, its story format included, and editing it
+ * differs: Storybook 10 (and 11 prereleases without
  * storybookjs/storybook#36613) hands out Babel nodes and prints with
  * recast; with #36613 csf-tools hand out ESTree nodes and edit text. Those steps
  * sit behind `StoryFileEditor`, implemented by `csf-writer-babel.ts` and
@@ -99,16 +99,21 @@ export interface StoryFileEditor {
    */
   topLevelNames(): Set<string>
   /**
-   * How the file's CSF3 stories are typed: the first story's annotation or
-   * `satisfies` clause, else the `Story` type alias when the file declares
-   * one, else untyped.
+   * The export the file's format calls for: a `<meta>.story()` call in a
+   * CSF factory file, else a CSF3 object typed like the file's stories —
+   * the first story's annotation or `satisfies` clause, else the `Story`
+   * type alias when the file declares one, else untyped.
    */
-  csf3Style(): ExportStyle
+  exportStyle(): ExportStyle
   /** The import declarations of `source`, in file order. */
   importsFrom(source: string): ImportDeclarationInfo[]
   /** Removes `specifier`, and its declaration once that is empty. */
   removeSpecifier(declaration: ImportDeclarationInfo, specifier: ImportSpecifierInfo): void
-  /** Adds `imported as local` (or a default `local`) to `declaration`. */
+  /**
+   * Adds `imported as local` (or a default `local`) to `declaration`. An
+   * editor whose csf-tools pick the import to extend themselves may add it
+   * to another import of the same module.
+   */
   addSpecifier(declaration: ImportDeclarationInfo, imported: string, local: string): void
   /** Adds an import of `imported as local` below the file's imports. */
   addImport(source: string, imported: string, local: string, typeOnly: boolean): void
@@ -249,17 +254,13 @@ export async function writeStoryIntoCsf(
     const lineEnding = detectLineEnding(existingCode)
     const file = open(csf, existingCode, fileName, lineEnding)
     const taken = file.topLevelNames()
-    for (const name of Object.keys(csf._storyExports)) taken.add(name)
     const requiredNames = [...new Set(request.requiredImports.flatMap(imp => [
       ...(imp.specifiers ?? []), ...(imp.defaultSpecifier ? [imp.defaultSpecifier] : []),
     ]))]
     const exportName = uniqueExportName(new Set([...taken, ...requiredNames]), desiredExportName)
 
-    const style: ExportStyle = csf._metaIsFactory
-      ? { kind: 'factory', metaName: csf._metaVariableName ?? 'meta' }
-      : file.csf3Style()
     const snippetBindings = file.parseStory(
-      renderStoryExport(style, exportName, request.storyObjectSource),
+      renderStoryExport(file.exportStyle(), exportName, request.storyObjectSource),
       requiredNames,
     )
     for (const name of snippetBindings) taken.add(name)

@@ -37,14 +37,6 @@ function hasUseClientDirective(program: T.Program): boolean {
   return false
 }
 
-/** `file:line:column` of an offset into `code`, both 1-based. */
-function locationIn(id: string, code: string, offset: number): string {
-  const before = code.slice(0, offset)
-  const line = before.split('\n').length
-  const column = offset - (before.lastIndexOf('\n') + 1) + 1
-  return `${id}:${line}:${column}`
-}
-
 function isComponentName(name: string | undefined | null): boolean {
   const first = name?.[0]
   return !!first && first === first.toUpperCase() && first !== first.toLowerCase()
@@ -99,7 +91,11 @@ function read(code: string, id: string): ModuleFacts {
   // Non-fatal detection gaps to surface as diagnostics.
   let anonDefaultLoc: string | null = null
   const unsupportedHoc = new Map<string, string>() // name -> file:line:col
-  const nodeLoc = (node: T.Node): string => locationIn(id, parsedCode, node.start)
+  // `file:line:column`, both 1-based; `locationOf` gives a 0-based column.
+  const nodeLoc = (node: T.Node): string => {
+    const { line, column } = tools().locationOf(parsedCode, node.start, node.end).start
+    return `${id}:${line}:${column + 1}`
+  }
 
   const considerDeclaration = (decl: T.Function | T.Class) => {
     const name = decl.id?.name
