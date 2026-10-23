@@ -3,6 +3,7 @@ import { getStorybookDevframeContext } from '../../context'
 import {
   buildStorybookEnv,
   resolveStorybookDevCommand,
+  toPtyCommand,
 } from '../../storybook-launch'
 import {
   adoptStorybookSession,
@@ -37,11 +38,13 @@ export const startStorybook = defineRpcFunction({
           if (stale) state.devtoolsTerminals.remove(stale)
 
           const port = new URL(storybookUrl).port || '6006'
-          const { command, args } = await resolveStorybookDevCommand({
-            cwd: ctx.cwd,
-            port,
-            logDebug,
-          })
+          const { command, args } = toPtyCommand(
+            await resolveStorybookDevCommand({
+              cwd: ctx.cwd,
+              port,
+              logDebug,
+            }),
+          )
 
           // A PTY session: the Terminals dock renders it writable, so
           // interactive prompts (e.g. Storybook's port-conflict question)

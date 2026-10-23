@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   buildStorybookEnv,
   resolveStorybookDevCommand,
+  toPtyCommand,
 } from './storybook-launch'
 
 describe('resolveStorybookDevCommand', () => {
@@ -77,6 +78,29 @@ describe('resolveStorybookDevCommand', () => {
 
     vi.doUnmock('storybook/internal/common')
     vi.resetModules()
+  })
+})
+
+describe('toPtyCommand', () => {
+  const command = { command: 'pnpm', args: ['exec', 'storybook', 'dev', '-p', '6006'] }
+
+  it('runs package manager shims through cmd.exe on Windows, which ConPTY cannot spawn directly', () => {
+    expect(toPtyCommand(command, 'win32', {})).toEqual({
+      command: 'cmd.exe',
+      args: ['/d', '/c', 'pnpm', 'exec', 'storybook', 'dev', '-p', '6006'],
+    })
+  })
+
+  it('uses ComSpec when set', () => {
+    expect(
+      toPtyCommand(command, 'win32', { ComSpec: 'C:\\Windows\\system32\\cmd.exe' })
+        .command,
+    ).toBe('C:\\Windows\\system32\\cmd.exe')
+  })
+
+  it('leaves the command untouched on other platforms', () => {
+    expect(toPtyCommand(command, 'linux', {})).toEqual(command)
+    expect(toPtyCommand(command, 'darwin', {})).toEqual(command)
   })
 })
 

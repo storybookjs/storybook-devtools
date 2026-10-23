@@ -59,6 +59,15 @@ export async function resolveStorybookDevCommand({
   }
 }
 
+export function toPtyCommand(
+  { command, args }: { command: string; args: string[] },
+  platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv = process.env,
+): { command: string; args: string[] } {
+  if (platform !== 'win32') return { command, args }
+  return { command: env['ComSpec'] || 'cmd.exe', args: ['/d', '/c', command, ...args] }
+}
+
 /**
  * Environment for the spawned Storybook process: the host dev server's own
  * env (so PATH, package-manager and Node settings carry over) with
